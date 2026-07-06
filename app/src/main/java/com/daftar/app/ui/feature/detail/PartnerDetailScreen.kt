@@ -62,7 +62,7 @@ import com.daftar.app.ui.common.LocalToaster
 import com.daftar.app.ui.common.MonoLabel
 import com.daftar.app.ui.common.ToastIcon
 import com.daftar.app.ui.components.DarkBalanceGrid
-import com.daftar.app.ui.components.PartnerBadge
+import com.daftar.app.ui.common.PartnerBadge
 import com.daftar.app.ui.navigation.DaftarDestinations
 import com.daftar.app.ui.theme.DaftarColors
 import com.daftar.app.ui.theme.Fraunces

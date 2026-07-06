@@ -81,4 +81,4 @@ class ToastCenter @Inject constructor() {
 }
 
 /** Lets deep composables raise toasts without threading callbacks everywhere. */
-val LocalToaster = staticCompositionLocalOf<(String, ToastIcon) -> Unit> { _, _ -> }
+val LocalToaster = staticCompositionLocalOf<(String, ToastIcon) -> Unit> { { _, _ -> } }

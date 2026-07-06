@@ -68,9 +68,9 @@ import com.daftar.app.ui.common.SheetHandle
 import com.daftar.app.ui.common.SubmitButton
 import com.daftar.app.ui.common.dashedBorder
 import com.daftar.app.ui.common.sanitizeAmountInput
-import com.daftar.app.ui.components.CustomerBadge
-import com.daftar.app.ui.components.PartnerBadge
-import com.daftar.app.ui.components.badgeColor
+import com.daftar.app.ui.common.CustomerBadge
+import com.daftar.app.ui.common.PartnerBadge
+import com.daftar.app.ui.common.badgeColor
 import com.daftar.app.ui.navigation.DaftarDestinations
 import com.daftar.app.ui.theme.DaftarColors
 import com.daftar.app.ui.theme.Fraunces

@@ -41,7 +41,7 @@ import com.daftar.app.ui.common.MonoLabel
 import com.daftar.app.ui.common.SheetHandle
 import com.daftar.app.ui.common.SubmitButton
 import com.daftar.app.ui.common.dashedBorder
-import com.daftar.app.ui.components.badgeColor
+import com.daftar.app.ui.common.badgeColor
 import com.daftar.app.ui.theme.DaftarColors
 import com.daftar.app.ui.theme.Fraunces
 import com.daftar.app.ui.theme.Inter

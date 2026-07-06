@@ -76,7 +76,7 @@ import com.daftar.app.ui.common.SubmitButton
 import com.daftar.app.ui.common.ToastCenter
 import com.daftar.app.ui.common.ToastIcon
 import com.daftar.app.ui.common.sanitizeAmountInput
-import com.daftar.app.ui.components.CustomerBadge
+import com.daftar.app.ui.common.CustomerBadge
 import com.daftar.app.ui.theme.DaftarColors
 import com.daftar.app.ui.theme.Fraunces
 import com.daftar.app.ui.theme.Inter

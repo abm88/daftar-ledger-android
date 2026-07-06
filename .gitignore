@@ -11,3 +11,4 @@ captures/
 *.aab
 *.keystore
 output-metadata.json
+.kotlin/

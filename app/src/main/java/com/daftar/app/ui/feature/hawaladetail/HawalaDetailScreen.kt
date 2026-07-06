@@ -70,7 +70,7 @@ import com.daftar.app.ui.common.dashedBorder
 import com.daftar.app.ui.components.DetailCard
 import com.daftar.app.ui.components.DetailRow
 import com.daftar.app.ui.components.DetailSectionTitle
-import com.daftar.app.ui.components.PartnerBadge
+import com.daftar.app.ui.common.PartnerBadge
 import com.daftar.app.ui.navigation.DaftarDestinations
 import com.daftar.app.ui.theme.DaftarColors
 import com.daftar.app.ui.theme.Fraunces

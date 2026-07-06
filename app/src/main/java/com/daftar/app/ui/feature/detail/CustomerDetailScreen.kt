@@ -55,7 +55,7 @@ import com.daftar.app.ui.common.LocalToaster
 import com.daftar.app.ui.common.MonoLabel
 import com.daftar.app.ui.common.ToastIcon
 import com.daftar.app.ui.common.dashedBorder
-import com.daftar.app.ui.components.CustomerBadge
+import com.daftar.app.ui.common.CustomerBadge
 import com.daftar.app.ui.components.DarkBalanceGrid
 import com.daftar.app.ui.navigation.DaftarDestinations
 import com.daftar.app.ui.theme.DaftarColors

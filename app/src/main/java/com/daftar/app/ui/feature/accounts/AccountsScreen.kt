@@ -53,9 +53,9 @@ import com.daftar.app.ui.common.MonoLabel
 import com.daftar.app.ui.common.SegmentButton
 import com.daftar.app.ui.common.SegmentedSwitcher
 import com.daftar.app.ui.common.dashedBorder
-import com.daftar.app.ui.components.CustomerBadge
+import com.daftar.app.ui.common.CustomerBadge
 import com.daftar.app.ui.components.DarkBalanceGrid
-import com.daftar.app.ui.components.PartnerBadge
+import com.daftar.app.ui.common.PartnerBadge
 import com.daftar.app.ui.components.PositionLines
 import com.daftar.app.ui.navigation.DaftarDestinations
 import com.daftar.app.ui.theme.DaftarColors

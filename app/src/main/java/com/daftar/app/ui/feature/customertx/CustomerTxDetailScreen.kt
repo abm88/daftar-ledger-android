@@ -64,7 +64,7 @@ import com.daftar.app.ui.common.LocalToaster
 import com.daftar.app.ui.common.MonoLabel
 import com.daftar.app.ui.common.ToastCenter
 import com.daftar.app.ui.common.ToastIcon
-import com.daftar.app.ui.components.CustomerBadge
+import com.daftar.app.ui.common.CustomerBadge
 import com.daftar.app.ui.components.DetailCard
 import com.daftar.app.ui.components.DetailRow
 import com.daftar.app.ui.components.DetailSectionTitle

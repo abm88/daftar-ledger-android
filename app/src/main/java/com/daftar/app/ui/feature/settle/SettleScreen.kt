@@ -58,7 +58,7 @@ import com.daftar.app.ui.common.IconSquareButton
 import com.daftar.app.ui.common.MonoLabel
 import com.daftar.app.ui.common.ToastCenter
 import com.daftar.app.ui.common.ToastIcon
-import com.daftar.app.ui.components.PartnerBadge
+import com.daftar.app.ui.common.PartnerBadge
 import com.daftar.app.ui.theme.DaftarColors
 import com.daftar.app.ui.theme.Fraunces
 import com.daftar.app.ui.theme.Inter
