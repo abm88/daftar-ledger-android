@@ -12,4 +12,7 @@ interface CashRepository {
 
     /** Apply a signed delta to one asset (FX legs, investments). */
     suspend fun adjustBalance(assetCode: String, delta: Double)
+
+    /** Empty the drawer — a fresh account starts with a blank shop. */
+    suspend fun clearAll()
 }

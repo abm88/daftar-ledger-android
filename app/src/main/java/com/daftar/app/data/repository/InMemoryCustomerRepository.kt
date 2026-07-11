@@ -37,6 +37,10 @@ class InMemoryCustomerRepository @Inject constructor(seed: SeedData) : CustomerR
         }
     }
 
+    override suspend fun clearAll() {
+        state.value = emptyList()
+    }
+
     override fun customerById(id: String): Customer? =
         state.value.firstOrNull { it.id == id }
 
