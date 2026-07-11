@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.rounded.Balance
 import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.BusinessCenter
@@ -52,6 +53,8 @@ import com.daftar.app.core.format.Formatters
 import com.daftar.app.domain.model.AssetCatalog
 import com.daftar.app.domain.model.LedgerPeriod
 import com.daftar.app.domain.model.ShopProfile
+import com.daftar.app.domain.model.UserAccount
+import com.daftar.app.domain.repository.AuthRepository
 import com.daftar.app.domain.repository.CashRepository
 import com.daftar.app.domain.repository.CustomerRepository
 import com.daftar.app.domain.repository.FxRepository
@@ -74,9 +77,11 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 data class ShopUiState(
     val profile: ShopProfile = ShopProfile(),
+    val user: UserAccount? = null,
     val contactCount: Int = 0,
     val entryCount: Int = 0,
     val cityCount: Int = 4,
@@ -100,15 +105,24 @@ class ShopViewModel @Inject constructor(
     settingsRepository: SettingsRepository,
     pnlCalculator: PnlCalculator,
     converter: CurrencyConverter,
+    private val authRepository: AuthRepository,
 ) : ViewModel() {
+
+    fun signOut() {
+        viewModelScope.launch { authRepository.signOut() }
+    }
 
     val uiState = combine(
         combine(partnerRepository.partners, customerRepository.customers) { p, c -> p to c },
         combine(fxRepository.trades, investmentRepository.investments) { t, i -> t to i },
         cashRepository.drawer,
         ratesRepository.rateBook,
-        combine(settingsRepository.settings, settingsRepository.shopProfile) { s, pr -> s to pr },
-    ) { (partners, customers), (trades, investments), drawer, rates, (settings, profile) ->
+        combine(
+            settingsRepository.settings,
+            settingsRepository.shopProfile,
+            authRepository.sessionUser,
+        ) { s, pr, u -> Triple(s, pr, u) },
+    ) { (partners, customers), (trades, investments), drawer, rates, (settings, profile, user) ->
         val hawalaCount = partners.sumOf { it.hawalas.size }
         val txCount = customers.sumOf { it.transactions.size }
 
@@ -125,6 +139,7 @@ class ShopViewModel @Inject constructor(
 
         ShopUiState(
             profile = profile,
+            user = user,
             contactCount = partners.size + customers.size,
             entryCount = hawalaCount + txCount,
             lastCountLabel = drawer.lastCountLabel,
@@ -147,6 +162,8 @@ private data class ShopItem(
     val sub: String,
     val route: String? = null,
     val stubToast: String? = null,
+    val danger: Boolean = false,
+    val onClick: (() -> Unit)? = null,
 )
 
 /** Shop tab: saraf profile, quick stats, and the settings hub. */
@@ -191,6 +208,14 @@ fun ShopScreen(
         ShopItem(Icons.Rounded.Lock, "PIN & biometric", "Face ID enabled", stubToast = "Security settings coming soon"),
         ShopItem(Icons.Rounded.Download, "Export daftar", "Daily · Weekly · Monthly", stubToast = "Export coming soon"),
         ShopItem(Icons.Rounded.Shield, "KYC & record keeping", "AFG Central Bank compliance", stubToast = "Compliance tools coming soon"),
+        ShopItem(
+            Icons.AutoMirrored.Rounded.Logout, "Sign out · وتل", "End session · لاسلیک ختم",
+            danger = true,
+            onClick = {
+                viewModel.signOut()
+                toaster("Signed out", ToastIcon.LOGOUT)
+            },
+        ),
     )
 
     LazyColumn(
@@ -198,6 +223,14 @@ fun ShopScreen(
         contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 110.dp),
     ) {
         item {
+            val user = state.user
+            val displayName = user?.name ?: state.profile.ownerName
+            val initials = displayName.split(' ')
+                .mapNotNull { it.firstOrNull()?.toString() }
+                .joinToString("")
+                .take(2)
+                .uppercase()
+                .ifEmpty { "S" }
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -212,18 +245,18 @@ fun ShopScreen(
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = "ر",
+                        text = initials,
                         style = TextStyle(
-                            fontFamily = NotoNaskhArabic,
+                            fontFamily = Fraunces,
                             fontWeight = FontWeight.Medium,
-                            fontSize = 30.sp,
+                            fontSize = 26.sp,
                             color = DaftarColors.GoldSoft,
                         ),
                     )
                 }
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    text = state.profile.ownerName,
+                    text = displayName,
                     style = TextStyle(
                         fontFamily = Fraunces,
                         fontWeight = FontWeight.Medium,
@@ -233,12 +266,19 @@ fun ShopScreen(
                 )
                 Spacer(Modifier.height(3.dp))
                 Text(
-                    text = "${state.profile.shopName} · ${state.profile.city.displayName}",
+                    text = user?.email ?: "${state.profile.shopName} · ${state.profile.city.displayName}",
                     style = TextStyle(fontFamily = Inter, fontSize = 12.sp, color = DaftarColors.Muted),
                 )
+                Spacer(Modifier.height(6.dp))
                 Text(
-                    text = "${state.profile.phone} · ${state.profile.registration}",
-                    style = TextStyle(fontFamily = Inter, fontSize = 12.sp, color = DaftarColors.Muted),
+                    text = "SIGNED IN · حساب فعال",
+                    style = TextStyle(
+                        fontFamily = JetBrainsMono,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 9.sp,
+                        letterSpacing = 0.15.em,
+                        color = DaftarColors.MutedLight,
+                    ),
                 )
             }
         }
@@ -267,8 +307,11 @@ fun ShopScreen(
                     .background(DaftarColors.PaperSoft)
                     .border(1.dp, DaftarColors.Line, RoundedCornerShape(12.dp))
                     .clickable {
-                        if (item.route != null) navController.navigate(item.route)
-                        else toaster(item.stubToast ?: "Coming soon", ToastIcon.CHECK)
+                        when {
+                            item.onClick != null -> item.onClick.invoke()
+                            item.route != null -> navController.navigate(item.route)
+                            else -> toaster(item.stubToast ?: "Coming soon", ToastIcon.CHECK)
+                        }
                     }
                     .padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -278,10 +321,15 @@ fun ShopScreen(
                     modifier = Modifier
                         .size(34.dp)
                         .clip(RoundedCornerShape(9.dp))
-                        .background(DaftarColors.PaperDeep),
+                        .background(if (item.danger) DaftarColors.Red.copy(alpha = 0.1f) else DaftarColors.PaperDeep),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(item.icon, contentDescription = null, tint = DaftarColors.InkSoft, modifier = Modifier.size(16.dp))
+                    Icon(
+                        item.icon,
+                        contentDescription = null,
+                        tint = if (item.danger) DaftarColors.Red else DaftarColors.InkSoft,
+                        modifier = Modifier.size(16.dp),
+                    )
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -290,7 +338,7 @@ fun ShopScreen(
                             fontFamily = Inter,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 13.sp,
-                            color = DaftarColors.Ink,
+                            color = if (item.danger) DaftarColors.Red else DaftarColors.Ink,
                         ),
                     )
                     Spacer(Modifier.height(2.dp))

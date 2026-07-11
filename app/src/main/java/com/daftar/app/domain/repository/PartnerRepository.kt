@@ -13,6 +13,9 @@ interface PartnerRepository {
     suspend fun addHawalas(partnerId: String, hawalas: List<Hawala>)
     suspend fun markHawalaPaid(hawalaId: String, dateLabel: String)
 
+    /** Remove all partners and their hawalas — a fresh account starts with a blank shop. */
+    suspend fun clearAll()
+
     fun partnerById(id: String): Counterparty?
     fun findHawala(hawalaId: String): Pair<Hawala, Counterparty>?
 }

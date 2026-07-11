@@ -8,4 +8,7 @@ interface FxRepository {
     val trades: StateFlow<List<FxTrade>>
 
     suspend fun addTrade(trade: FxTrade)
+
+    /** Remove all trades — a fresh account starts with a blank shop. */
+    suspend fun clearAll()
 }

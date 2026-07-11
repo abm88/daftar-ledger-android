@@ -26,6 +26,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.daftar.app.domain.model.UserAccount
+import com.daftar.app.domain.repository.AuthRepository
 import com.daftar.app.ui.common.LocalToaster
 import com.daftar.app.ui.common.ToastCenter
 import com.daftar.app.ui.common.ToastIcon
@@ -45,6 +47,7 @@ import com.daftar.app.ui.feature.main.MainScreen
 import com.daftar.app.ui.feature.newcusttx.NewCustomerTxScreen
 import com.daftar.app.ui.feature.newhawala.NewHawalaScreen
 import com.daftar.app.ui.feature.pnl.PnlScreen
+import com.daftar.app.ui.feature.auth.AuthScreen
 import com.daftar.app.ui.feature.rates.RatesScreen
 import com.daftar.app.ui.feature.settle.SettleScreen
 import com.daftar.app.ui.feature.setup.InitialSetupScreen
@@ -55,17 +58,22 @@ import com.daftar.app.ui.navigation.DaftarDestinations
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.StateFlow
 
 @HiltViewModel
 class AppViewModel @Inject constructor(
     val toastCenter: ToastCenter,
-) : ViewModel()
+    authRepository: AuthRepository,
+) : ViewModel() {
+    /** Drives the auth gate: null shows the login/signup flow. */
+    val sessionUser: StateFlow<UserAccount?> = authRepository.sessionUser
+}
 
-/** Root of the UI: navigation graph, splash overlay, and the global toast pill. */
+/** Root of the UI: auth gate, navigation graph, splash overlay, and the global toast pill. */
 @Composable
 fun DaftarApp(appViewModel: AppViewModel = hiltViewModel()) {
-    val navController = rememberNavController()
     val toast by appViewModel.toastCenter.current.collectAsStateWithLifecycle()
+    val sessionUser by appViewModel.sessionUser.collectAsStateWithLifecycle()
     var splashVisible by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
@@ -83,93 +91,100 @@ fun DaftarApp(appViewModel: AppViewModel = hiltViewModel()) {
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background),
         ) {
-            NavHost(
-                navController = navController,
-                startDestination = DaftarDestinations.MAIN,
-            ) {
-                composable(DaftarDestinations.MAIN) { MainScreen(navController) }
+            if (sessionUser == null) {
+                // Auth gate — no session, no app. Signing out lands back here
+                // and discards the previous navigation stack, like the prototype.
+                AuthScreen()
+            } else {
+                val navController = rememberNavController()
+                NavHost(
+                    navController = navController,
+                    startDestination = DaftarDestinations.MAIN,
+                ) {
+                    composable(DaftarDestinations.MAIN) { MainScreen(navController) }
 
-                composable(
-                    DaftarDestinations.PARTNER_DETAIL,
-                    arguments = listOf(navArgument("partnerId") { type = NavType.StringType }),
-                ) { PartnerDetailScreen(navController) }
+                    composable(
+                        DaftarDestinations.PARTNER_DETAIL,
+                        arguments = listOf(navArgument("partnerId") { type = NavType.StringType }),
+                    ) { PartnerDetailScreen(navController) }
 
-                composable(
-                    DaftarDestinations.CUSTOMER_DETAIL,
-                    arguments = listOf(navArgument("customerId") { type = NavType.StringType }),
-                ) { CustomerDetailScreen(navController) }
+                    composable(
+                        DaftarDestinations.CUSTOMER_DETAIL,
+                        arguments = listOf(navArgument("customerId") { type = NavType.StringType }),
+                    ) { CustomerDetailScreen(navController) }
 
-                composable(
-                    DaftarDestinations.CUSTOMER_TX_DETAIL,
-                    arguments = listOf(navArgument("txId") { type = NavType.StringType }),
-                ) { CustomerTxDetailScreen(navController) }
+                    composable(
+                        DaftarDestinations.CUSTOMER_TX_DETAIL,
+                        arguments = listOf(navArgument("txId") { type = NavType.StringType }),
+                    ) { CustomerTxDetailScreen(navController) }
 
-                composable(
-                    DaftarDestinations.HAWALA_DETAIL,
-                    arguments = listOf(navArgument("hawalaId") { type = NavType.StringType }),
-                ) { HawalaDetailScreen(navController) }
+                    composable(
+                        DaftarDestinations.HAWALA_DETAIL,
+                        arguments = listOf(navArgument("hawalaId") { type = NavType.StringType }),
+                    ) { HawalaDetailScreen(navController) }
 
-                composable(
-                    DaftarDestinations.NEW_HAWALA,
-                    arguments = listOf(
-                        navArgument("partnerId") {
-                            type = NavType.StringType
-                            nullable = true
-                            defaultValue = null
-                        },
-                    ),
-                ) { NewHawalaScreen(navController) }
+                    composable(
+                        DaftarDestinations.NEW_HAWALA,
+                        arguments = listOf(
+                            navArgument("partnerId") {
+                                type = NavType.StringType
+                                nullable = true
+                                defaultValue = null
+                            },
+                        ),
+                    ) { NewHawalaScreen(navController) }
 
-                composable(
-                    DaftarDestinations.NEW_CUSTOMER_TX,
-                    arguments = listOf(
-                        navArgument("mode") {
-                            type = NavType.StringType
-                            defaultValue = "full"
-                        },
-                        navArgument("customerId") {
-                            type = NavType.StringType
-                            nullable = true
-                            defaultValue = null
-                        },
-                    ),
-                ) { NewCustomerTxScreen(navController) }
+                    composable(
+                        DaftarDestinations.NEW_CUSTOMER_TX,
+                        arguments = listOf(
+                            navArgument("mode") {
+                                type = NavType.StringType
+                                defaultValue = "full"
+                            },
+                            navArgument("customerId") {
+                                type = NavType.StringType
+                                nullable = true
+                                defaultValue = null
+                            },
+                        ),
+                    ) { NewCustomerTxScreen(navController) }
 
-                composable(DaftarDestinations.NEW_FX) { FxFormScreen(navController) }
-                composable(DaftarDestinations.FX_LEDGER) { FxLedgerScreen(navController) }
+                    composable(DaftarDestinations.NEW_FX) { FxFormScreen(navController) }
+                    composable(DaftarDestinations.FX_LEDGER) { FxLedgerScreen(navController) }
 
-                composable(
-                    DaftarDestinations.SETTLE,
-                    arguments = listOf(navArgument("partnerId") { type = NavType.StringType }),
-                ) { SettleScreen(navController) }
+                    composable(
+                        DaftarDestinations.SETTLE,
+                        arguments = listOf(navArgument("partnerId") { type = NavType.StringType }),
+                    ) { SettleScreen(navController) }
 
-                composable(
-                    DaftarDestinations.CUSTOMER_STATEMENT,
-                    arguments = listOf(navArgument("customerId") { type = NavType.StringType }),
-                ) { CustomerStatementScreen(navController) }
+                    composable(
+                        DaftarDestinations.CUSTOMER_STATEMENT,
+                        arguments = listOf(navArgument("customerId") { type = NavType.StringType }),
+                    ) { CustomerStatementScreen(navController) }
 
-                composable(
-                    DaftarDestinations.PARTNER_STATEMENT,
-                    arguments = listOf(navArgument("partnerId") { type = NavType.StringType }),
-                ) { PartnerStatementScreen(navController) }
+                    composable(
+                        DaftarDestinations.PARTNER_STATEMENT,
+                        arguments = listOf(navArgument("partnerId") { type = NavType.StringType }),
+                    ) { PartnerStatementScreen(navController) }
 
-                composable(
-                    DaftarDestinations.BUSINESS_STATEMENT,
-                    arguments = listOf(
-                        navArgument("filter") {
-                            type = NavType.StringType
-                            defaultValue = "all"
-                        },
-                    ),
-                ) { BusinessStatementScreen(navController) }
+                    composable(
+                        DaftarDestinations.BUSINESS_STATEMENT,
+                        arguments = listOf(
+                            navArgument("filter") {
+                                type = NavType.StringType
+                                defaultValue = "all"
+                            },
+                        ),
+                    ) { BusinessStatementScreen(navController) }
 
-                composable(DaftarDestinations.RATES) { RatesScreen(navController) }
-                composable(DaftarDestinations.ASSET_MANAGEMENT) { AssetManagementScreen(navController) }
-                composable(DaftarDestinations.CASH_COUNT) { CashCountScreen(navController) }
-                composable(DaftarDestinations.PNL) { PnlScreen(navController) }
-                composable(DaftarDestinations.INVESTMENTS) { InvestmentsScreen(navController) }
-                composable(DaftarDestinations.DEFAULTS) { DefaultsScreen(navController) }
-                composable(DaftarDestinations.INITIAL_SETUP) { InitialSetupScreen(navController) }
+                    composable(DaftarDestinations.RATES) { RatesScreen(navController) }
+                    composable(DaftarDestinations.ASSET_MANAGEMENT) { AssetManagementScreen(navController) }
+                    composable(DaftarDestinations.CASH_COUNT) { CashCountScreen(navController) }
+                    composable(DaftarDestinations.PNL) { PnlScreen(navController) }
+                    composable(DaftarDestinations.INVESTMENTS) { InvestmentsScreen(navController) }
+                    composable(DaftarDestinations.DEFAULTS) { DefaultsScreen(navController) }
+                    composable(DaftarDestinations.INITIAL_SETUP) { InitialSetupScreen(navController) }
+                }
             }
 
             AnimatedVisibility(
