@@ -19,4 +19,8 @@ class InMemoryInvestmentRepository @Inject constructor(seed: SeedData) : Investm
     override suspend fun addInvestment(investment: Investment) {
         state.update { it + investment }
     }
+
+    override suspend fun clearAll() {
+        state.value = emptyList()
+    }
 }

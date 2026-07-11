@@ -19,4 +19,8 @@ class InMemoryFxRepository @Inject constructor(seed: SeedData) : FxRepository {
     override suspend fun addTrade(trade: FxTrade) {
         state.update { it + trade }
     }
+
+    override suspend fun clearAll() {
+        state.value = emptyList()
+    }
 }

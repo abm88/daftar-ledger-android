@@ -12,6 +12,9 @@ interface CustomerRepository {
     suspend fun addTransaction(customerId: String, transaction: CustomerTransaction)
     suspend fun deleteTransaction(transactionId: String)
 
+    /** Remove all customers and their transactions — a fresh account starts with a blank shop. */
+    suspend fun clearAll()
+
     fun customerById(id: String): Customer?
     fun findTransaction(transactionId: String): Pair<CustomerTransaction, Customer>?
 }

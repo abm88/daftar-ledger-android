@@ -1,5 +1,7 @@
 package com.daftar.app.di
 
+import android.content.Context
+import android.content.SharedPreferences
 import com.daftar.app.core.time.SystemTimeProvider
 import com.daftar.app.core.time.TimeProvider
 import com.daftar.app.data.repository.InMemoryCashRepository
@@ -9,7 +11,9 @@ import com.daftar.app.data.repository.InMemoryInvestmentRepository
 import com.daftar.app.data.repository.InMemoryPartnerRepository
 import com.daftar.app.data.repository.InMemoryRatesRepository
 import com.daftar.app.data.repository.InMemorySettingsRepository
+import com.daftar.app.data.repository.LocalAuthRepository
 import com.daftar.app.data.seed.SeedData
+import com.daftar.app.domain.repository.AuthRepository
 import com.daftar.app.domain.repository.CashRepository
 import com.daftar.app.domain.repository.CustomerRepository
 import com.daftar.app.domain.repository.FxRepository
@@ -21,6 +25,7 @@ import dagger.Binds
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
@@ -40,6 +45,7 @@ abstract class RepositoryModule {
     @Binds abstract fun cashRepository(impl: InMemoryCashRepository): CashRepository
     @Binds abstract fun ratesRepository(impl: InMemoryRatesRepository): RatesRepository
     @Binds abstract fun settingsRepository(impl: InMemorySettingsRepository): SettingsRepository
+    @Binds abstract fun authRepository(impl: LocalAuthRepository): AuthRepository
 }
 
 @Module
@@ -53,4 +59,10 @@ object CoreModule {
     @Provides
     @Singleton
     fun seedData(timeProvider: TimeProvider): SeedData = SeedData(timeProvider)
+
+    /** Private prefs file holding the device-local account store. */
+    @Provides
+    @Singleton
+    fun authPreferences(@ApplicationContext context: Context): SharedPreferences =
+        context.getSharedPreferences("daftar_auth", Context.MODE_PRIVATE)
 }

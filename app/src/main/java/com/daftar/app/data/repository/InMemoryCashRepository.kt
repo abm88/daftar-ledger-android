@@ -31,4 +31,10 @@ class InMemoryCashRepository @Inject constructor(seed: SeedData) : CashRepositor
             drawer.copy(balances = drawer.balances + (assetCode to current + delta))
         }
     }
+
+    override suspend fun clearAll() {
+        state.update { drawer ->
+            drawer.copy(balances = drawer.balances.mapValues { 0.0 }, lastCountLabel = "never")
+        }
+    }
 }

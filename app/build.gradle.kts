@@ -62,6 +62,8 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    // Android's bundled org.json is a non-functional stub under unit tests; use the real one.
+    testImplementation(libs.json)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
 }

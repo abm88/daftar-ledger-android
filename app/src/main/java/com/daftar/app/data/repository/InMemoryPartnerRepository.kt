@@ -46,6 +46,10 @@ class InMemoryPartnerRepository @Inject constructor(seed: SeedData) : PartnerRep
         }
     }
 
+    override suspend fun clearAll() {
+        state.value = emptyList()
+    }
+
     override fun partnerById(id: String): Counterparty? =
         state.value.firstOrNull { it.id == id }
 
