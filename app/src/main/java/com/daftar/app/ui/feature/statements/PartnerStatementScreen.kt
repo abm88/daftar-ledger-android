@@ -46,6 +46,7 @@ import com.daftar.app.domain.model.ShopProfile
 import com.daftar.app.domain.repository.PartnerRepository
 import com.daftar.app.domain.repository.SettingsRepository
 import com.daftar.app.domain.usecase.PositionCalculator
+import com.daftar.app.ui.common.IconSquareButton
 import com.daftar.app.ui.common.MonoLabel
 import com.daftar.app.ui.theme.DaftarColors
 import com.daftar.app.ui.theme.Fraunces
@@ -113,11 +114,67 @@ fun PartnerStatementScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val partner = state.partner ?: return
 
+    // v18 cp-statement print doc ("cp-statement-{shortname}").
+    val printSpec = {
+        com.daftar.app.core.print.StatementPrintSpec(
+            jobName = "cp-statement-" + partner.shortName.lowercase().replace(Regex("[^a-z0-9]+"), "-"),
+            docTitle = "Partner Statement",
+            pashtoTitle = "د همکار صرافي حساب",
+            metaLeftLabel = "Partner",
+            metaLeftValue = partner.name,
+            metaLeftSub = "${partner.city.displayName} · ${partner.phone}",
+            metaRightLabel = "Issued",
+            metaRightValue = state.issuedLabel,
+            metaRightSub = partner.tier.label.replace("-", "").uppercase() + " tier",
+            summary = AssetCatalog.LEDGER_CURRENCIES.map { cur ->
+                val amt = state.position[cur]
+                com.daftar.app.core.print.PrintSummaryCell(
+                    heading = cur,
+                    amount = Formatters.signPrefix(amt) + Formatters.number(abs(amt)),
+                    status = if (amt > 0) "LONG" else if (amt < 0) "SHORT" else "FLAT",
+                )
+            },
+            columns = listOf("Date", "Entry", "Detail", "Cur", "Debit", "Credit", "Balance"),
+            rows = state.rows.map { row ->
+                val h = row.hawala
+                val pending = h.status == com.daftar.app.domain.model.HawalaStatus.PENDING
+                val amountText = Formatters.number(h.amount)
+                val debit = if (!pending && h.positionDelta < 0) Formatters.number(abs(h.positionDelta)) else "—"
+                val credit = if (!pending && h.positionDelta > 0) Formatters.number(h.positionDelta) else "—"
+                listOf(
+                    h.dateLabel + if (pending) " (pending)" else "",
+                    when (h.type) {
+                        com.daftar.app.domain.model.HawalaType.SETTLEMENT -> "Settlement"
+                        com.daftar.app.domain.model.HawalaType.SEND -> "Sent hawala"
+                        com.daftar.app.domain.model.HawalaType.RECEIVE -> "Received hawala"
+                    },
+                    if (h.type == com.daftar.app.domain.model.HawalaType.SETTLEMENT) (h.note ?: "Settled")
+                    else "${h.senderName} → ${h.receiverName}" +
+                        (if (h.pickupCode != com.daftar.app.domain.model.SYNTHETIC_CODE) " · ${h.pickupCode}" else ""),
+                    h.currency,
+                    debit,
+                    credit,
+                    Formatters.signPrefix(row.runningBalance).ifEmpty { "+" } + Formatters.number(abs(row.runningBalance)),
+                )
+            },
+            profile = state.profile,
+            issuedLabel = state.issuedLabel,
+        )
+    }
+    val printContext = androidx.compose.ui.platform.LocalContext.current
+
     Column(modifier = Modifier.fillMaxWidth()) {
         StatementHeaderBar(
             title = "Partner Statement",
             subtitle = partner.name,
             onBack = { navController.popBackStack() },
+            trailing = {
+                IconSquareButton(
+                    androidx.compose.material.icons.Icons.Rounded.Download,
+                    { com.daftar.app.core.print.StatementPrinter.print(printContext, printSpec()) },
+                    onDark = true,
+                )
+            },
         )
 
         Column(
@@ -135,18 +192,19 @@ fun PartnerStatementScreen(
                 leftLabel = "Partner", leftValue = partner.name,
                 leftSub = "${partner.city.displayName} · ${partner.phone}",
                 rightLabel = "Issued", rightValue = state.issuedLabel,
-                rightSub = "${partner.tier.label.uppercase()} tier",
+                rightSub = partner.tier.label.replace("-", "").uppercase() + " tier", // v18: "ADHOC tier"
             )
             StatementSummary(
                 AssetCatalog.LEDGER_CURRENCIES.map { cur ->
                     val amt = state.position[cur]
+                    // v18 signs/labels on any non-zero position.
                     StatementSummaryCell(
                         heading = cur,
-                        amount = Formatters.signPrefix(amt, 0.5) + Formatters.number(abs(amt)),
-                        status = if (amt > 0.5) "OWES YOU" else if (amt < -0.5) "YOU OWE" else "SETTLED",
+                        amount = Formatters.signPrefix(amt) + Formatters.number(abs(amt)),
+                        status = if (amt > 0) "OWES YOU" else if (amt < 0) "YOU OWE" else "SETTLED",
                         color = when {
-                            amt > 0.5 -> DaftarColors.Green
-                            amt < -0.5 -> DaftarColors.Red
+                            amt > 0 -> DaftarColors.Green
+                            amt < 0 -> DaftarColors.Red
                             else -> DaftarColors.Muted
                         },
                     )
@@ -168,7 +226,7 @@ fun PartnerStatementScreen(
             StatementFooter(state.issuedLabel.uppercase())
         }
 
-        StatementActions(modifier = Modifier.navigationBarsPadding())
+        StatementActions(modifier = Modifier.navigationBarsPadding(), printSpec = printSpec)
     }
 }
 

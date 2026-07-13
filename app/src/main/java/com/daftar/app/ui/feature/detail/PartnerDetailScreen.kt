@@ -35,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
@@ -64,6 +65,8 @@ import com.daftar.app.ui.common.ToastIcon
 import com.daftar.app.ui.components.DarkBalanceGrid
 import com.daftar.app.ui.common.PartnerBadge
 import com.daftar.app.ui.navigation.DaftarDestinations
+import com.daftar.app.ui.components.EmptyState
+import com.daftar.app.ui.components.EmptyStateTone
 import com.daftar.app.ui.theme.DaftarColors
 import com.daftar.app.ui.theme.Fraunces
 import com.daftar.app.ui.theme.Inter
@@ -165,7 +168,7 @@ fun PartnerDetailScreen(
                 Spacer(Modifier.height(14.dp))
                 DarkBalanceGrid(
                     position = state.position,
-                    statusFor = { amt -> if (amt > 0.5) "OWES YOU" else if (amt < -0.5) "YOU OWE" else "SETTLED" },
+                    statusFor = { amt -> if (amt > 0) "OWES YOU" else if (amt < 0) "YOU OWE" else "SETTLED" },
                 )
             }
         }
@@ -210,9 +213,15 @@ fun PartnerDetailScreen(
         val hawalas = partner.hawalas.reversed()
         if (hawalas.isEmpty()) {
             item {
-                Box(Modifier.fillMaxWidth().padding(vertical = 30.dp), contentAlignment = Alignment.Center) {
-                    Text("No transactions yet", style = TextStyle(fontFamily = Inter, fontSize = 13.sp, color = DaftarColors.Muted))
-                }
+                EmptyState(
+                    icon = Icons.AutoMirrored.Rounded.Send,
+                    title = "No transactions yet",
+                    sub = "Send a hawala or settle a balance with this branch. Entries and running positions will appear here.",
+                    tone = EmptyStateTone.COPPER,
+                    ctaLabel = "Send hawala · نوې حواله",
+                    ctaIcon = Icons.AutoMirrored.Rounded.Send,
+                    onCta = { navController.navigate(DaftarDestinations.newHawala(partner.id)) },
+                )
             }
         } else {
             items(count = hawalas.size, key = { i -> hawalas[i].id }) { i ->
@@ -276,6 +285,17 @@ private fun PartnerTxEntry(h: Hawala, onClick: () -> Unit) {
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .background(if (isSettle) DaftarColors.Gold.copy(alpha = 0.05f) else Color.Transparent)
+            // v18 accents settlement entries with a 3dp copper left rule.
+            .then(
+                if (isSettle) {
+                    Modifier.drawBehind {
+                        drawRect(
+                            color = com.daftar.app.ui.theme.DaftarColors.Copper,
+                            size = androidx.compose.ui.geometry.Size(3.dp.toPx(), size.height),
+                        )
+                    }
+                } else Modifier,
+            )
             .padding(horizontal = 20.dp, vertical = 14.dp),
     ) {
         Row(

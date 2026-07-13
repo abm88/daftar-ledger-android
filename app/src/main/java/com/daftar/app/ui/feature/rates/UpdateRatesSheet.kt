@@ -72,21 +72,36 @@ class UpdateRatesViewModel @Inject constructor(
     private val toastCenter: ToastCenter,
 ) : ViewModel() {
 
-    private val edits = MutableStateFlow<Map<String, Pair<String, String>>>(
-        run {
-            val book = ratesRepository.rateBook.value
-            settingsRepository.settings.value.activeAssets()
-                .filter { it.code != "AFN" }
-                .associate { asset ->
-                    val rate = book.assetRate(asset.code)
-                    val decimals = if ((rate?.sell ?: 1.0) < 1) 3 else 2
-                    asset.code to (
-                        Formatters.rate(rate?.buy ?: 0.0, decimals) to
-                            Formatters.rate(rate?.sell ?: 0.0, decimals)
-                        )
+
+    private val ratesRepository = ratesRepository
+    private val settingsRepository = settingsRepository
+
+    private val edits = MutableStateFlow(seedEdits())
+
+    /**
+     * v18 rebuilds the buffer from state.rates on every edit-rates tap, so a
+     * reopened sheet always shows freshly formatted current rates (and blank
+     * inputs for assets with no quote yet).
+     */
+    private fun seedEdits(): Map<String, Pair<String, String>> {
+        val book = ratesRepository.rateBook.value
+        return settingsRepository.settings.value.activeAssets()
+            .filter { it.code != "AFN" }
+            .associate { asset ->
+                val rate = book.assetRate(asset.code)
+                asset.code to if (rate == null) {
+                    "" to ""
+                } else {
+                    val decimals = if (rate.sell < 1) 3 else 2
+                    Formatters.rate(rate.buy, decimals) to Formatters.rate(rate.sell, decimals)
                 }
-        },
-    )
+            }
+    }
+
+    /** Called when the sheet opens; discards any stale draft from a prior open. */
+    fun refresh() {
+        edits.value = seedEdits()
+    }
 
     val rows = combine(
         settingsRepository.settings,
@@ -136,6 +151,9 @@ fun UpdateRatesSheet(
 ) {
     val rows by viewModel.rows.collectAsStateWithLifecycle()
 
+    // Re-seed from the live rate book each time the sheet is opened (v18).
+    androidx.compose.runtime.LaunchedEffect(Unit) { viewModel.refresh() }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = DaftarColors.Paper,
@@ -166,7 +184,7 @@ fun UpdateRatesSheet(
                 Spacer(Modifier.height(4.dp))
                 Text(
                     "Update buy/sell rates per asset against AFN. Metals are quoted per gram. " +
-                        "To count cash, go to Shop · Count Cash.",
+                        "To count cash, go to Daftar · Count Cash.",
                     style = TextStyle(fontFamily = Inter, fontSize = 11.sp, color = DaftarColors.CopperDeep),
                 )
             }

@@ -12,6 +12,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -25,6 +26,7 @@ import com.daftar.app.ui.theme.Inter
 fun ToastPill(toast: ToastData) {
     Row(
         modifier = Modifier
+            .shadow(10.dp, RoundedCornerShape(14.dp)) // v18 gives the pill a soft drop shadow
             .background(DaftarColors.Ink, RoundedCornerShape(14.dp))
             .border(1.dp, DaftarColors.Gold.copy(alpha = 0.3f), RoundedCornerShape(14.dp))
             .padding(horizontal = 18.dp, vertical = 12.dp),
@@ -45,6 +47,8 @@ fun ToastPill(toast: ToastData) {
                 fontSize = 13.sp,
                 color = DaftarColors.Paper,
             ),
+            maxLines = 1, // v18 keeps the pill to a single line
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
         )
     }
 }

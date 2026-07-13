@@ -12,4 +12,7 @@ interface SettingsRepository {
     suspend fun setReportingCurrency(code: String)
     suspend fun setTradeCurrency(code: String)
     suspend fun setAssetActive(code: String, active: Boolean)
+
+    /** Swap in another account's preferences (per-user persistence restore / blank-shop reset). */
+    suspend fun replaceSettings(settings: LedgerSettings)
 }

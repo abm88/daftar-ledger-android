@@ -53,7 +53,7 @@ private fun parseOpenings(values: Map<String, String>): Map<String, Double> =
         raw.trim().toDoubleOrNull()?.takeIf { it != 0.0 }?.let { cur to it }
     }.toMap()
 
-/** "Add partner" sheet: tier, city, identity, phone, optional opening balances. */
+/** "Add branch" sheet (v18 rename): tier, city, identity, phone, optional opening balances. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddPartnerSheet(
@@ -84,9 +84,9 @@ fun AddPartnerSheet(
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 28.dp),
         ) {
-            Text("Add partner", style = MaterialTheme.typography.headlineMedium, color = DaftarColors.Ink)
+            Text("Add branch", style = MaterialTheme.typography.headlineMedium, color = DaftarColors.Ink)
             Text(
-                "د نوي صرافي همکار اضافه کول",
+                "نوې څانګه اضافه کول",
                 style = MaterialTheme.typography.bodyMedium,
                 color = DaftarColors.Muted,
             )
@@ -135,7 +135,7 @@ fun AddPartnerSheet(
             CityPickerRow(selected = city, onSelect = { city = it })
 
             Spacer(Modifier.height(14.dp))
-            FieldBox("Saraf shop · سرای", modifier = Modifier.fillMaxWidth()) {
+            FieldBox("Saraf name · سرای", modifier = Modifier.fillMaxWidth()) {
                 FieldTextInput(name, { name = it }, "e.g. Sarai Shahzada — Haji Yusuf")
             }
             Spacer(Modifier.height(10.dp))

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -24,6 +25,7 @@ import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.BusinessCenter
 import androidx.compose.material.icons.rounded.ChatBubble
 import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Group
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Public
@@ -64,6 +66,7 @@ import com.daftar.app.domain.repository.RatesRepository
 import com.daftar.app.domain.repository.SettingsRepository
 import com.daftar.app.domain.usecase.CurrencyConverter
 import com.daftar.app.domain.usecase.PnlCalculator
+import com.daftar.app.domain.usecase.SignOutUseCase
 import com.daftar.app.ui.common.LocalToaster
 import com.daftar.app.ui.common.ToastIcon
 import com.daftar.app.ui.navigation.DaftarDestinations
@@ -85,6 +88,7 @@ data class ShopUiState(
     val contactCount: Int = 0,
     val entryCount: Int = 0,
     val cityCount: Int = 4,
+    val partnerCount: Int = 0,
     val lastCountLabel: String = "",
     val pnlSubtitle: String = "",
     val investmentsSubtitle: String = "",
@@ -105,11 +109,13 @@ class ShopViewModel @Inject constructor(
     settingsRepository: SettingsRepository,
     pnlCalculator: PnlCalculator,
     converter: CurrencyConverter,
-    private val authRepository: AuthRepository,
+    authRepository: AuthRepository,
+    private val signOutUseCase: SignOutUseCase,
 ) : ViewModel() {
 
     fun signOut() {
-        viewModelScope.launch { authRepository.signOut() }
+        // Saves the shop one final time before the session ends (v18 logout).
+        viewModelScope.launch { signOutUseCase() }
     }
 
     val uiState = combine(
@@ -142,6 +148,7 @@ class ShopViewModel @Inject constructor(
             user = user,
             contactCount = partners.size + customers.size,
             entryCount = hawalaCount + txCount,
+            partnerCount = partners.size,
             lastCountLabel = drawer.lastCountLabel,
             pnlSubtitle = (if (grandRep >= 0) "+" else "−") +
                 Formatters.compact(grandRep, repDecimals) + " " + reporting +
@@ -185,6 +192,12 @@ fun ShopScreen(
         ShopItem(
             Icons.Rounded.Balance, "Live Rates",
             "USD/AFN · PKR/AFN · USD/PKR — view & broadcast", DaftarDestinations.RATES,
+        ),
+        // v18: partner sarafs moved from the Accounts tab to Daftar → Branches.
+        ShopItem(
+            Icons.Rounded.Group, "Branches · څانګې",
+            "${state.partnerCount} partner sarafs · net positions & settlements",
+            DaftarDestinations.BRANCHES,
         ),
         ShopItem(
             Icons.Rounded.BusinessCenter, "Assets · Currencies & Metals",
@@ -237,13 +250,30 @@ fun ShopScreen(
                     .padding(top = 24.dp, bottom = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
+                // v18 profile avatar: 86dp rounded square, inset gold keyline, and a
+                // large low-opacity Naskh watermark of the first letter behind the
+                // Latin initials.
                 Box(
                     modifier = Modifier
-                        .size(72.dp)
-                        .clip(CircleShape)
+                        .size(86.dp)
+                        .clip(RoundedCornerShape(22.dp))
                         .background(DaftarColors.Ink),
                     contentAlignment = Alignment.Center,
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(3.dp)
+                            .border(1.dp, DaftarColors.Gold.copy(alpha = 0.35f), RoundedCornerShape(19.dp)),
+                    )
+                    Text(
+                        text = displayName.firstOrNull()?.toString() ?: "س",
+                        style = TextStyle(
+                            fontFamily = NotoNaskhArabic,
+                            fontSize = 52.sp,
+                            color = DaftarColors.GoldSoft.copy(alpha = 0.18f),
+                        ),
+                    )
                     Text(
                         text = initials,
                         style = TextStyle(

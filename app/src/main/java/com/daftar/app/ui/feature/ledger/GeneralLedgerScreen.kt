@@ -16,8 +16,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.MenuBook
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Print
-import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -45,6 +47,9 @@ import com.daftar.app.ui.common.DaftarFilterChip
 import com.daftar.app.ui.common.DaftarSearchField
 import com.daftar.app.ui.common.IconSquareButton
 import com.daftar.app.ui.common.MonoLabel
+import com.daftar.app.ui.common.SyncIconButton
+import com.daftar.app.ui.components.EmptyState
+import com.daftar.app.ui.components.EmptyStateTone
 import com.daftar.app.ui.components.ledgerFeedItems
 import com.daftar.app.ui.feature.home.NewEntryFab
 import com.daftar.app.ui.feature.home.openLedgerEntry
@@ -60,6 +65,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 enum class LedgerFilter(val label: String, val kind: LedgerEntryKind?) {
     ALL("All", null),
@@ -79,6 +85,7 @@ data class GeneralLedgerUiState(
     val todayInAfn: Double = 0.0,
     val todayOutAfn: Double = 0.0,
     val todayStartMillis: Long = 0,
+    val syncing: Boolean = false,
 ) {
     val todayNetAfn: Double get() = todayInAfn - todayOutAfn
 }
@@ -88,23 +95,39 @@ class GeneralLedgerViewModel @Inject constructor(
     activityFeedBuilder: ActivityFeedBuilder,
     ratesRepository: RatesRepository,
     private val timeProvider: TimeProvider,
+    private val toastCenter: com.daftar.app.ui.common.ToastCenter,
 ) : ViewModel() {
 
     private val filter = MutableStateFlow(LedgerFilter.ALL)
     private val search = MutableStateFlow("")
+    private val syncing = MutableStateFlow(false)
+
+    // TODO(backend): replace the simulated delay with a real ledger-sync call.
+    fun sync() {
+        if (syncing.value) return
+        viewModelScope.launch {
+            syncing.value = true
+            kotlinx.coroutines.delay(1100)
+            syncing.value = false
+            toastCenter.show("Ledger synced", com.daftar.app.ui.common.ToastIcon.REFRESH)
+        }
+    }
 
     val uiState = combine(
         activityFeedBuilder.observe(),
         ratesRepository.rateBook,
         filter,
         search,
-    ) { feed, rates, filter, search ->
+        syncing,
+    ) { feed, rates, filter, search, syncing ->
         val todayStart = timeProvider.startOfTodayMillis()
         val todayEntries = feed.filter { it.timestampMillis >= todayStart }
         var inAfn = 0.0
         var outAfn = 0.0
         todayEntries.forEach { entry ->
-            val afn = rates.toAfn(entry.currency, entry.amount)
+            // v18 toAfn falls back (USD→72, PKR→0.28, others pass through)
+            // instead of dropping unquoted currencies to zero.
+            val afn = rates.toAfnOrFallback(entry.currency, entry.amount)
             when {
                 entry.direction > 0 -> inAfn += afn
                 entry.direction < 0 -> outAfn += afn
@@ -126,19 +149,44 @@ class GeneralLedgerViewModel @Inject constructor(
             todayInAfn = inAfn,
             todayOutAfn = outAfn,
             todayStartMillis = todayStart,
+            syncing = syncing,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), GeneralLedgerUiState())
 
     fun setFilter(value: LedgerFilter) { filter.value = value }
     fun setSearch(value: String) { search.value = value }
 
+    // v18 matches against the rendered title + subtitle + currency, so city
+    // codes, "pending", the "You Received/You Gave" wording, and FX P&L text
+    // are all searchable. The pickup code stays searchable as an Android extra.
     private fun entryMatches(entry: LedgerEntry, query: String): Boolean {
         val haystack = when (entry) {
-            is LedgerEntry.HawalaEntry ->
-                "${entry.partner.name} ${entry.hawala.senderName} ${entry.hawala.receiverName} ${entry.hawala.pickupCode}"
-            is LedgerEntry.SettlementEntry -> "settlement ${entry.partner.name} ${entry.hawala.note ?: ""}"
-            is LedgerEntry.CustomerTxEntry -> "${entry.customer.name} ${entry.tx.note ?: ""} ${entry.tx.type.label}"
-            is LedgerEntry.FxEntry -> "${entry.trade.fromCurrency} ${entry.trade.toCurrency} ${entry.trade.note ?: ""}"
+            is LedgerEntry.SettlementEntry ->
+                "settlement · ${entry.partner.shortName} ${entry.hawala.note ?: "Position offset"}"
+            is LedgerEntry.HawalaEntry -> buildString {
+                append(if (entry.hawala.type == com.daftar.app.domain.model.HawalaType.SEND) "Sent hawala · " else "Received hawala · ")
+                append(entry.partner.shortName)
+                append(" ${entry.hawala.fromCity.code} → ${entry.hawala.toCity.code}")
+                append(" · ${entry.hawala.senderName} → ${entry.hawala.receiverName}")
+                if (entry.hawala.status == com.daftar.app.domain.model.HawalaStatus.PENDING) append(" · pending")
+                append(" ${entry.hawala.pickupCode}")
+            }
+            is LedgerEntry.CustomerTxEntry -> buildString {
+                append(if (entry.isHawalaLinked) "Hawala debit · " else "${entry.tx.type.feedLabel} · ")
+                append(entry.customer.name)
+                append(" ${entry.tx.note ?: "Customer account · ${entry.customer.city.displayName}"}")
+            }
+            is LedgerEntry.FxEntry -> buildString {
+                val trade = entry.trade
+                append(if (trade.side == com.daftar.app.domain.model.FxSide.SELL) "Sold " else "Bought ")
+                append("${trade.fromCurrency} → ${trade.toCurrency}")
+                append(" @ ${Formatters.ratePlain(trade.rate)}")
+                val realized = trade.realizedPnlAfn
+                if (realized != null && kotlin.math.abs(realized) >= 0.5) {
+                    append(if (realized >= 0) " profit" else " loss")
+                }
+                append(" ${trade.note ?: ""}")
+            }
         } + " " + entry.currency
         return haystack.lowercase().contains(query)
     }
@@ -209,7 +257,7 @@ fun GeneralLedgerScreen(
                                 )
                             },
                         )
-                        IconSquareButton(icon = Icons.Rounded.Refresh, onClick = {})
+                        SyncIconButton(syncing = state.syncing, onClick = viewModel::sync)
                     }
                 }
             }
@@ -246,19 +294,33 @@ fun GeneralLedgerScreen(
             }
 
             if (state.entries.isEmpty()) {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 40.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = if (state.search.isNotBlank() || state.filter != LedgerFilter.ALL) {
-                                "No matching activity"
-                            } else "No activity yet",
-                            style = TextStyle(fontFamily = Inter, fontSize = 13.sp, color = DaftarColors.Muted),
+                if (state.search.isBlank() && state.filter == LedgerFilter.ALL) {
+                    // v18 first-run state with a New Entry CTA.
+                    item {
+                        EmptyState(
+                            icon = Icons.AutoMirrored.Rounded.MenuBook,
+                            title = "No activity yet",
+                            pashto = "تر اوسه هیڅ فعالیت نشته",
+                            sub = "Your trades, hawalas, and account entries will appear here as you record them. Tap New Entry to begin.",
+                            tone = EmptyStateTone.COPPER,
+                            ctaLabel = "New Entry · نوې لیکنه",
+                            ctaIcon = Icons.Rounded.Add,
+                            onCta = onOpenNewEntry,
                         )
+                    }
+                } else {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 40.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "No matching activity",
+                                style = TextStyle(fontFamily = Inter, fontSize = 13.sp, color = DaftarColors.Muted),
+                            )
+                        }
                     }
                 }
             } else {
@@ -295,7 +357,14 @@ private fun TodayRibbon(state: GeneralLedgerUiState) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.Bottom,
         ) {
-            MonoLabel("Today · نن", color = DaftarColors.GoldSoft, fontSize = 9)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                androidx.compose.material3.Icon(
+                    Icons.Rounded.Schedule, null,
+                    tint = DaftarColors.GoldSoft,
+                    modifier = Modifier.height(11.dp),
+                )
+                MonoLabel("Today · نن", color = DaftarColors.GoldSoft, fontSize = 9)
+            }
             MonoLabel("AFN-equivalent", color = DaftarColors.GoldSoft.copy(alpha = 0.7f), fontSize = 9, letterSpacing = 0.1)
         }
         Spacer(modifier = Modifier.height(10.dp))

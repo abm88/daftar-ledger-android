@@ -6,8 +6,11 @@ import com.daftar.app.data.repository.InMemoryCustomerRepository
 import com.daftar.app.data.repository.InMemoryFxRepository
 import com.daftar.app.data.repository.InMemoryInvestmentRepository
 import com.daftar.app.data.repository.InMemoryPartnerRepository
+import com.daftar.app.data.repository.InMemoryRatesRepository
+import com.daftar.app.data.repository.InMemorySettingsRepository
 import com.daftar.app.data.seed.SeedData
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -24,16 +27,26 @@ class ClearShopDataUseCaseTest {
         val fx = InMemoryFxRepository(seed)
         val investments = InMemoryInvestmentRepository(seed)
         val cash = InMemoryCashRepository(seed)
+        val rates = InMemoryRatesRepository(seed)
+        val settings = InMemorySettingsRepository()
 
-        // Precondition: the seeded demo shop is not empty.
+        // Precondition: the seeded demo shop is not empty; dirty the settings/rates too.
         assertTrue(partners.partners.value.isNotEmpty())
+        settings.setReportingCurrency("USD")
+        settings.setAssetActive("EUR", true)
+        rates.updateAssetRates(mapOf("USD" to (80.0 to 81.0)))
 
-        ClearShopDataUseCase(cash, partners, customers, fx, investments).invoke()
+        ClearShopDataUseCase(cash, partners, customers, fx, investments, rates, settings, seed).invoke()
 
         assertTrue(partners.partners.value.isEmpty())
         assertTrue(customers.customers.value.isEmpty())
         assertTrue(fx.trades.value.isEmpty())
         assertTrue(investments.investments.value.isEmpty())
         assertTrue(cash.drawer.value.balances.values.all { it == 0.0 })
+        // v18 createBlankUserData: drawer label, factory rates, default settings all reset.
+        assertEquals("Not yet counted", cash.drawer.value.lastCountLabel)
+        assertEquals(seed.rateBook, rates.rateBook.value)
+        assertEquals("AFN", settings.settings.value.reportingCurrency)
+        assertTrue(settings.settings.value.activeAssetOverrides.isEmpty())
     }
 }

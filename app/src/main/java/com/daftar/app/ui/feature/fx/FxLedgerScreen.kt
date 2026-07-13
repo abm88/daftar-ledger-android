@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.HorizontalDivider
@@ -50,6 +51,8 @@ import com.daftar.app.domain.repository.RatesRepository
 import com.daftar.app.domain.usecase.FxAnalytics
 import com.daftar.app.ui.common.MonoLabel
 import com.daftar.app.ui.navigation.DaftarDestinations
+import com.daftar.app.ui.components.EmptyState
+import com.daftar.app.ui.components.EmptyStateTone
 import com.daftar.app.ui.theme.DaftarColors
 import com.daftar.app.ui.theme.Fraunces
 import com.daftar.app.ui.theme.Inter
@@ -103,7 +106,12 @@ class FxLedgerViewModel @Inject constructor(
             .map { (dayOffset, dayTrades) ->
                 val dayStart = todayStart + dayOffset * 86_400_000L
                 FxDayGroup(
-                    label = Formatters.relativeDayLabel(dayStart, todayStart),
+                    // v18's FX ledger uses full dates ("2 Jul 2026") past yesterday.
+                    label = when {
+                        dayStart >= todayStart -> "Today · نن"
+                        dayStart >= todayStart - 86_400_000L -> "Yesterday · پرون"
+                        else -> Formatters.fullDateLabel(dayStart)
+                    },
                     trades = dayTrades,
                     dayPnl = dayTrades.sumOf { it.realizedPnlAfn ?: 0.0 },
                 )
@@ -263,6 +271,20 @@ fun FxLedgerScreen(
                 }
             }
 
+            if (state.groups.isEmpty()) {
+                item {
+                    EmptyState(
+                        icon = Icons.Rounded.Refresh,
+                        title = "No trades yet",
+                        pashto = "تر اوسه هیڅ راکړه ورکړه نشته",
+                        sub = "Buy and sell currencies to record exchange trades. Your trade history and realized profit will show here.",
+                        tone = EmptyStateTone.GREEN,
+                        ctaLabel = "New trade · نوی سودا",
+                        ctaIcon = Icons.Rounded.Add,
+                        onCta = { navController.navigate(DaftarDestinations.NEW_FX) },
+                    )
+                }
+            }
             state.groups.forEach { group ->
                 item(key = "fxday_" + group.label) {
                     Row(
@@ -302,7 +324,7 @@ fun FxLedgerScreen(
                 .align(Alignment.BottomEnd)
                 .padding(end = 20.dp, bottom = 24.dp)
                 .size(56.dp)
-                .clip(CircleShape)
+                .clip(RoundedCornerShape(18.dp))
                 .background(DaftarColors.Copper)
                 .clickable { navController.navigate(DaftarDestinations.NEW_FX) },
             contentAlignment = Alignment.Center,
@@ -433,7 +455,7 @@ private fun FxTradeRow(trade: FxTrade) {
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = "rate ${trade.rate} · ${trade.note ?: "no note"}",
+                text = "rate ${Formatters.ratePlain(trade.rate)} · ${trade.note ?: "no note"}",
                 style = TextStyle(fontFamily = JetBrainsMono, fontSize = 10.sp, color = DaftarColors.Muted),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

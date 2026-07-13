@@ -9,4 +9,7 @@ interface RatesRepository {
 
     /** Replace buy/sell quotes per asset code; derived pairs are re-synced by the impl. */
     suspend fun updateAssetRates(quotes: Map<String, Pair<Double, Double>>)
+
+    /** Swap in a whole rate book (per-user persistence restore / blank-shop reset). */
+    suspend fun replaceAll(book: RateBook)
 }

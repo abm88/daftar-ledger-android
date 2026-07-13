@@ -1,14 +1,39 @@
 package com.daftar.app.domain.model
 
+// Prototype v18 renamed the customer entry types to saraf-perspective wording:
+// deposit → "You Received", withdrawal → "You Gave". The label used depends on
+// the surface — feed rows, statements, and toasts each use their own variant.
 enum class CustomerTxType(val label: String, val pashtoLabel: String) {
     OPENING("Opening balance", "پیلیز پاتي"),
-    DEPOSIT("Deposit", "سپما"),
-    WITHDRAWAL("Withdrawal", "ایستل"),
+    DEPOSIT("You Received", "جمع"),
+    WITHDRAWAL("You Gave", "ایستل"),
     CHARGE("Charge on behalf", "په وکالت پیسې ورکړل"),
     CREDIT("Advance credit", "پیشکي پور");
 
     /** Debits reduce what the saraf owes the customer. */
     val isDebit: Boolean get() = this == WITHDRAWAL || this == CHARGE || this == CREDIT
+
+    /** Ledger-feed row title (v18 activityFeed: charge → "Charge", credit → "Credit advance"). */
+    val feedLabel: String
+        get() = when (this) {
+            CHARGE -> "Charge"
+            CREDIT -> "Credit advance"
+            else -> label
+        }
+
+    /** Statement / customer-history label (v18 statement rows: charge → "Paid on behalf"). */
+    val statementLabel: String
+        get() = if (this == CHARGE) "Paid on behalf" else label
+
+    /** Plain accounting word — used by save toasts ("Deposit recorded · …") like v18. */
+    val plainLabel: String
+        get() = when (this) {
+            OPENING -> "Opening"
+            DEPOSIT -> "Deposit"
+            WITHDRAWAL -> "Withdrawal"
+            CHARGE -> "Charge"
+            CREDIT -> "Credit"
+        }
 }
 
 /** Cross-currency detail attached when cash was taken in one currency but booked in another. */

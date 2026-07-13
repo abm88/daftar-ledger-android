@@ -46,7 +46,8 @@ data class FxFormUiState(
 ) {
     val amount: Double get() = form.fromAmountText.toDoubleOrNull() ?: 0.0
     val rate: Double get() = form.rateText.toDoubleOrNull() ?: 0.0
-    val sufficientCash: Boolean get() = amount <= availableCash + 0.5
+    // v18's form gate is strict — any overshoot of the drawer blocks review.
+    val sufficientCash: Boolean get() = amount <= availableCash
     val canSubmit: Boolean get() = amount > 0 && rate > 0 && sufficientCash
     val isBuy: Boolean get() = form.fromCurrency == "AFN"
     val marketRateText: String
@@ -55,7 +56,8 @@ data class FxFormUiState(
         get() = if (computedToAmount <= 0) null else {
             "${Formatters.amount(amount, form.fromCurrency)} ${form.fromCurrency} " +
                 (if (form.fromCurrency == pairBase) "×" else "÷") +
-                " ${form.rateText} = ${Formatters.amount(computedToAmount, form.toCurrency)} ${form.toCurrency}"
+                // v18 formats the parsed rate to the pair's decimals here.
+                " ${Formatters.rate(rate, 2)} = ${Formatters.amount(computedToAmount, form.toCurrency)} ${form.toCurrency}"
         }
 }
 

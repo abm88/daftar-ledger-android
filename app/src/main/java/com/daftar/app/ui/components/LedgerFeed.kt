@@ -1,6 +1,7 @@
 package com.daftar.app.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -96,13 +97,7 @@ private fun styleFor(entry: LedgerEntry): LedgerRowStyle = when (entry) {
     is LedgerEntry.CustomerTxEntry -> {
         val credit = entry.direction > 0
         val linked = entry.isHawalaLinked
-        val label = when (entry.tx.type) {
-            CustomerTxType.DEPOSIT -> "Deposit"
-            CustomerTxType.WITHDRAWAL -> "Withdrawal"
-            CustomerTxType.CHARGE -> "Charge"
-            CustomerTxType.CREDIT -> "Credit advance"
-            CustomerTxType.OPENING -> "Opening"
-        }
+        val label = entry.tx.type.feedLabel
         LedgerRowStyle(
             icon = when {
                 linked -> Icons.AutoMirrored.Rounded.Send
@@ -143,7 +138,7 @@ private fun styleFor(entry: LedgerEntry): LedgerRowStyle = when (entry) {
             background = (if (sell) DaftarColors.Red else DaftarColors.Green).copy(alpha = 0.1f),
             title = (if (sell) "Sold " else "Bought ") + "${trade.fromCurrency} → ${trade.toCurrency}",
             subtitle = "${Formatters.amount(trade.fromAmount, trade.fromCurrency)} " +
-                "${trade.fromCurrency} @ ${trade.rate}$plSuffix",
+                "${trade.fromCurrency} @ ${Formatters.ratePlain(trade.rate)}$plSuffix",
             amountPrefix = "",
             amountColor = when {
                 realized == null -> DaftarColors.Ink
@@ -151,7 +146,7 @@ private fun styleFor(entry: LedgerEntry): LedgerRowStyle = when (entry) {
                 else -> DaftarColors.Red
             },
             tag = "EXCHANGE",
-            tagColor = DaftarColors.Copper,
+            tagColor = DaftarColors.CopperDeep,
             pending = false,
         )
     }
@@ -163,15 +158,19 @@ fun LedgerEntryRow(entry: LedgerEntry, onOpen: (LedgerEntry) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 3.dp)
+            .clip(RoundedCornerShape(13.dp))
+            .background(DaftarColors.PaperSoft)
+            .border(1.dp, DaftarColors.Line, RoundedCornerShape(13.dp))
             .clickable { onOpen(entry) }
-            .padding(horizontal = 20.dp, vertical = 10.dp),
+            .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(
             modifier = Modifier
-                .size(36.dp)
-                .clip(RoundedCornerShape(10.dp))
+                .size(40.dp)
+                .clip(RoundedCornerShape(11.dp))
                 .background(style.background),
             contentAlignment = Alignment.Center,
         ) {
@@ -219,7 +218,7 @@ fun LedgerEntryRow(entry: LedgerEntry, onOpen: (LedgerEntry) -> Unit) {
             }
             Text(
                 text = style.subtitle,
-                style = TextStyle(fontFamily = Inter, fontSize = 11.sp, color = DaftarColors.Muted),
+                style = TextStyle(fontFamily = JetBrainsMono, fontSize = 11.sp, color = DaftarColors.Muted),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -240,16 +239,23 @@ fun LedgerEntryRow(entry: LedgerEntry, onOpen: (LedgerEntry) -> Unit) {
             ) {
                 MonoLabel(entry.currency, fontSize = 9, letterSpacing = 0.1)
                 if (style.tag != null && style.tagColor != null) {
-                    Text(
-                        text = style.tag,
-                        style = TextStyle(
-                            fontFamily = JetBrainsMono,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 7.sp,
-                            letterSpacing = 0.08.em,
-                            color = style.tagColor,
-                        ),
-                    )
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(style.tagColor.copy(alpha = 0.12f))
+                            .padding(horizontal = 5.dp, vertical = 1.dp),
+                    ) {
+                        Text(
+                            text = style.tag,
+                            style = TextStyle(
+                                fontFamily = JetBrainsMono,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 7.sp,
+                                letterSpacing = 0.08.em,
+                                color = style.tagColor,
+                            ),
+                        )
+                    }
                 }
             }
             Text(
@@ -257,7 +263,7 @@ fun LedgerEntryRow(entry: LedgerEntry, onOpen: (LedgerEntry) -> Unit) {
                 style = TextStyle(
                     fontFamily = JetBrainsMono,
                     fontSize = 9.sp,
-                    color = DaftarColors.MutedLight,
+                    color = DaftarColors.Muted,
                 ),
             )
         }
@@ -275,7 +281,7 @@ fun LedgerDayHeader(label: String, count: Int) {
     ) {
         MonoLabel(label, fontSize = 9)
         HorizontalDivider(modifier = Modifier.weight(1f), color = DaftarColors.Line)
-        MonoLabel(count.toString(), fontSize = 9, color = DaftarColors.CopperDeep)
+        MonoLabel(count.toString(), fontSize = 9, color = DaftarColors.InkSoft)
     }
 }
 

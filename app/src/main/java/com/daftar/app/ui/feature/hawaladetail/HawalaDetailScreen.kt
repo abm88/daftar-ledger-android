@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -34,6 +36,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,6 +74,8 @@ import com.daftar.app.ui.components.DetailCard
 import com.daftar.app.ui.components.DetailRow
 import com.daftar.app.ui.components.DetailSectionTitle
 import com.daftar.app.ui.common.PartnerBadge
+import com.daftar.app.ui.feature.main.OPEN_TAB_HAWALAS
+import com.daftar.app.ui.feature.main.OPEN_TAB_KEY
 import com.daftar.app.ui.navigation.DaftarDestinations
 import com.daftar.app.ui.theme.DaftarColors
 import com.daftar.app.ui.theme.Fraunces
@@ -123,10 +128,27 @@ fun HawalaDetailScreen(
     viewModel: HawalaDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val hawala = state.hawala ?: return
-    val partner = state.partner ?: return
     val toaster = LocalToaster.current
     val clipboard = LocalClipboardManager.current
+
+    // v18 back-from-hawala always lands on the Hawalas tab, wherever the
+    // detail was opened from (home feed, partner detail, post-issue).
+    val backToHawalas: () -> Unit = {
+        runCatching {
+            navController.getBackStackEntry(DaftarDestinations.MAIN)
+                .savedStateHandle[OPEN_TAB_KEY] = OPEN_TAB_HAWALAS
+        }
+        navController.popBackStack(DaftarDestinations.MAIN, inclusive = false)
+    }
+
+    val hawala = state.hawala
+    val partner = state.partner
+    if (hawala == null || partner == null) {
+        // Stale or unknown id — v18 falls back to the home screen rather
+        // than showing a blank page.
+        LaunchedEffect(Unit) { navController.popBackStack(DaftarDestinations.MAIN, inclusive = false) }
+        return
+    }
 
     val pending = hawala.status == HawalaStatus.PENDING
     val commissionAmount = hawala.resolvedCommissionAmount
@@ -142,7 +164,9 @@ fun HawalaDetailScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(if (pending) DaftarColors.Ink else DaftarColors.GreenDeep)
+                        // v18 keeps the ink header in both states; only the status
+                        // chip and glow shift to green once paid.
+                        .background(DaftarColors.Ink)
                         .statusBarsPadding()
                         .padding(horizontal = 20.dp)
                         .padding(top = 8.dp, bottom = 20.dp),
@@ -152,7 +176,7 @@ fun HawalaDetailScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        IconSquareButton(Icons.AutoMirrored.Rounded.ArrowBack, { navController.popBackStack() }, onDark = true)
+                        IconSquareButton(Icons.AutoMirrored.Rounded.ArrowBack, backToHawalas, onDark = true)
                         Row(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
@@ -191,7 +215,7 @@ fun HawalaDetailScreen(
                             )
                             Box(
                                 modifier = Modifier
-                                    .background(if (pending) DaftarColors.Ink else DaftarColors.GreenDeep)
+                                    .background(DaftarColors.Ink)
                                     .padding(horizontal = 10.dp, vertical = 4.dp),
                             ) {
                                 Icon(
@@ -317,9 +341,11 @@ fun HawalaDetailScreen(
                 DetailSectionTitle("Partner")
                 DetailCard {
                     DetailRow(
-                        label = "${partner.city.displayName} · ${partner.tier.label} tier",
+                        label = "Partner saraf",
                         value = partner.name,
-                        sub = partner.phone,
+                        // v18 folds city, phone, and tier into one sub-line.
+                        sub = "${partner.city.displayName} · ${partner.phone} · " +
+                            partner.tier.label.replace("-", "").uppercase() + " tier",
                         leading = { PartnerBadge(partner, 36.dp) },
                         trailing = {
                             Icon(
@@ -384,7 +410,9 @@ fun HawalaDetailScreen(
                         icon = if (pending) Icons.Rounded.Schedule else Icons.Rounded.Check,
                         state = if (pending) TimelineState.CURRENT else TimelineState.DONE,
                         label = if (pending) "Awaiting pickup" else "Paid out to receiver",
-                        time = if (pending) "Receiver presents code at ${hawala.toCity.displayName}" else hawala.dateLabel,
+                        time = if (pending) {
+                            "Receiver presents code at ${hawala.toCity.displayName}"
+                        } else if (hawala.dateLabel == "Just paid") "Just now" else hawala.dateLabel,
                         isLast = pending,
                     )
                     if (!pending) {
@@ -424,7 +452,7 @@ fun HawalaDetailScreen(
                         .weight(1f)
                         .clip(RoundedCornerShape(14.dp))
                         .border(1.5.dp, DaftarColors.Ink, RoundedCornerShape(14.dp))
-                        .clickable { navController.popBackStack() }
+                        .clickable(onClick = backToHawalas)
                         .padding(vertical = 14.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically,
@@ -499,38 +527,62 @@ private fun TimelineStep(
     time: String,
     isLast: Boolean = false,
 ) {
-    Row(modifier = Modifier.padding(bottom = if (isLast) 4.dp else 14.dp)) {
-        Box(
-            modifier = Modifier
-                .size(24.dp)
-                .clip(CircleShape)
-                .background(
-                    when (state) {
-                        TimelineState.DONE -> DaftarColors.Green
-                        TimelineState.CURRENT -> DaftarColors.Copper
-                        TimelineState.UPCOMING -> DaftarColors.PaperDeep
-                    },
-                )
-                .border(
-                    1.5.dp,
-                    when (state) {
-                        TimelineState.DONE -> DaftarColors.Green
-                        TimelineState.CURRENT -> DaftarColors.Copper
-                        TimelineState.UPCOMING -> DaftarColors.GoldSoft
-                    },
-                    CircleShape,
-                ),
-            contentAlignment = Alignment.Center,
+    Row(
+        modifier = Modifier
+            .height(IntrinsicSize.Min)
+            .padding(bottom = if (isLast) 4.dp else 0.dp),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxHeight(),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = if (state == TimelineState.UPCOMING) DaftarColors.Gold else DaftarColors.Paper,
-                modifier = Modifier.size(11.dp),
-            )
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    // v18 gives the current dot a soft copper halo ring.
+                    .then(
+                        if (state == TimelineState.CURRENT) {
+                            Modifier.border(4.dp, DaftarColors.Copper.copy(alpha = 0.18f), CircleShape)
+                        } else Modifier,
+                    )
+                    .clip(CircleShape)
+                    .background(
+                        when (state) {
+                            TimelineState.DONE -> DaftarColors.Green
+                            TimelineState.CURRENT -> DaftarColors.Copper
+                            TimelineState.UPCOMING -> DaftarColors.PaperDeep
+                        },
+                    )
+                    .border(
+                        1.5.dp,
+                        when (state) {
+                            TimelineState.DONE -> DaftarColors.Green
+                            TimelineState.CURRENT -> DaftarColors.Copper
+                            TimelineState.UPCOMING -> DaftarColors.GoldSoft
+                        },
+                        CircleShape,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (state == TimelineState.UPCOMING) DaftarColors.Gold else DaftarColors.Paper,
+                    modifier = Modifier.size(11.dp),
+                )
+            }
+            if (!isLast) {
+                // Connector rail linking this dot to the next step (v18).
+                Box(
+                    modifier = Modifier
+                        .width(1.5.dp)
+                        .weight(1f)
+                        .background(DaftarColors.LineStrong),
+                )
+            }
         }
         Spacer(Modifier.width(12.dp))
-        Column {
+        Column(modifier = Modifier.padding(bottom = if (isLast) 0.dp else 14.dp)) {
             Text(
                 text = label,
                 style = TextStyle(

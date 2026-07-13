@@ -74,7 +74,7 @@ fun SplashOverlay() {
                 style = TextStyle(
                     fontFamily = NotoNaskhArabic,
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 44.sp,
+                    fontSize = 54.sp,
                     color = DaftarColors.Ink,
                 ),
             )

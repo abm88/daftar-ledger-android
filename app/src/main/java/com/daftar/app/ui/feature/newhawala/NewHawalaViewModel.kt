@@ -46,6 +46,11 @@ data class NewHawalaFormState(
     val pickupCode: String = "",
     val picker: HawalaPicker = HawalaPicker.NONE,
     val confirming: Boolean = false,
+    /** v18 picker-context add flows (add-cp / add-customer without leaving the draft). */
+    val addPartnerOpen: Boolean = false,
+    val addCustomerOpen: Boolean = false,
+    /** Red error styling on the amount after a failed validation (v18 shake). */
+    val amountError: Boolean = false,
 )
 
 /** Everything the form needs that is derived from repositories + draft. */
@@ -76,6 +81,8 @@ class NewHawalaViewModel @Inject constructor(
     private val positionCalculator: PositionCalculator,
     private val commissionCalculator: CommissionCalculator,
     private val issueHawala: IssueHawalaUseCase,
+    private val addPartnerUseCase: com.daftar.app.domain.usecase.AddPartnerUseCase,
+    private val addCustomerUseCase: com.daftar.app.domain.usecase.AddCustomerUseCase,
     private val toastCenter: ToastCenter,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
@@ -90,10 +97,9 @@ class NewHawalaViewModel @Inject constructor(
             NewHawalaFormState(
                 currency = settingsRepository.settings.value.tradeCurrency,
                 partnerId = defaultPartner?.id,
-                toCity = when {
-                    prefillPartner != null && prefillPartner.city != City.KBL -> prefillPartner.city
-                    else -> City.HRT
-                },
+                // v18 aims the corridor at the prefilled partner's city
+                // unconditionally (even for a same-city partner).
+                toCity = prefillPartner?.city ?: City.HRT,
                 pickupCode = codeGenerator.next(),
             ),
         )
@@ -146,7 +152,7 @@ class NewHawalaViewModel @Inject constructor(
             if (amount > 0) {
                 val seeded = amount * current.commissionPercent / 100
                 fixedText = if (current.currency == "USD") String.format(java.util.Locale.US, "%.2f", seeded)
-                else seeded.toLong().toString()
+                else kotlin.math.roundToLong(seeded).toString() // v18 toFixed(0) rounds
             }
         }
         form.value = current.copy(commissionMode = mode, commissionFixedText = fixedText)
@@ -158,6 +164,48 @@ class NewHawalaViewModel @Inject constructor(
             senderName = customer.name,
             picker = HawalaPicker.NONE,
         )
+    }
+
+    /** v18 add-cp-from-picker: create the branch inline, auto-select it, aim the corridor. */
+    fun addPartnerAndSelect(
+        name: String, shortName: String, initial: String, phone: String,
+        city: City, tier: com.daftar.app.domain.model.PartnerTier, openings: Map<String, Double>,
+    ) {
+        viewModelScope.launch {
+            val partner = addPartnerUseCase(
+                com.daftar.app.domain.usecase.NewPartnerDraft(name, shortName, initial, phone, city, tier, openings),
+            )
+            if (partner != null) {
+                toastCenter.show("${partner.name} added", ToastIcon.PERSON_ADD)
+                form.value = form.value.copy(
+                    partnerId = partner.id,
+                    toCity = partner.city,
+                    picker = HawalaPicker.NONE,
+                    addPartnerOpen = false,
+                )
+            }
+        }
+    }
+
+    /** v18 add-customer-from-picker (returnTo hawala-sender): auto-select as sender. */
+    fun addCustomerAndSelectSender(
+        name: String, shortName: String, initial: String, phone: String,
+        city: City, notes: String, openings: Map<String, Double>,
+    ) {
+        viewModelScope.launch {
+            val customer = addCustomerUseCase(
+                com.daftar.app.domain.usecase.NewCustomerDraft(name, shortName, initial, phone, city, notes, openings),
+            )
+            if (customer != null) {
+                toastCenter.show("Account opened · ${customer.name}", ToastIcon.PERSON_ADD)
+                form.value = form.value.copy(
+                    senderCustomerId = customer.id,
+                    senderName = customer.name,
+                    picker = HawalaPicker.NONE,
+                    addCustomerOpen = false,
+                )
+            }
+        }
     }
 
     fun pickPartner(partner: Counterparty) {
@@ -175,8 +223,11 @@ class NewHawalaViewModel @Inject constructor(
         val state = uiState.value
         val form = state.form
         when {
-            state.amount <= 0 || form.receiverName.isBlank() ->
+            state.amount <= 0 || form.receiverName.isBlank() -> {
+                // v18 also shakes the amount box; we flag it red until edited.
+                if (state.amount <= 0) update { it.copy(amountError = true) }
                 toastCenter.show("Fill amount and receiver", ToastIcon.CROSS)
+            }
             form.senderMode == SenderMode.ACCOUNT && form.senderCustomerId == null ->
                 toastCenter.show("Choose sender account", ToastIcon.CROSS)
             form.senderMode == SenderMode.ACCOUNT && state.insufficientAccountFunds ->

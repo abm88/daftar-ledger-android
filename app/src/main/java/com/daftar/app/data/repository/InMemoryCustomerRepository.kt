@@ -41,6 +41,10 @@ class InMemoryCustomerRepository @Inject constructor(seed: SeedData) : CustomerR
         state.value = emptyList()
     }
 
+    override suspend fun replaceAll(customers: List<Customer>) {
+        state.value = customers
+    }
+
     override fun customerById(id: String): Customer? =
         state.value.firstOrNull { it.id == id }
 

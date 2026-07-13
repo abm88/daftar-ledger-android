@@ -21,9 +21,12 @@ object DaftarDestinations {
         if (partnerId == null) "newHawala" else "newHawala?partnerId=$partnerId"
 
     /** mode: full | gave | received */
-    const val NEW_CUSTOMER_TX = "newCustomerTx?mode={mode}&customerId={customerId}"
-    fun newCustomerTx(mode: String = "full", customerId: String? = null) =
-        "newCustomerTx?mode=$mode" + (customerId?.let { "&customerId=$it" } ?: "")
+    /** locked pins the entry to the given customer (v18 detail-page quick FABs). */
+    const val NEW_CUSTOMER_TX = "newCustomerTx?mode={mode}&customerId={customerId}&locked={locked}"
+    fun newCustomerTx(mode: String = "full", customerId: String? = null, locked: Boolean = false) =
+        "newCustomerTx?mode=$mode" +
+            (customerId?.let { "&customerId=$it" } ?: "") +
+            (if (locked) "&locked=true" else "")
 
     const val NEW_FX = "newFx"
     const val FX_LEDGER = "fxLedger"
@@ -41,6 +44,8 @@ object DaftarDestinations {
     fun businessStatement(filter: String = "all") = "statement/business?filter=$filter"
 
     const val RATES = "rates"
+    // v18 moved the partner-saraf list from the Accounts tab to Daftar → Branches.
+    const val BRANCHES = "branches"
     const val ASSET_MANAGEMENT = "assets"
     const val CASH_COUNT = "cashCount"
     const val PNL = "pnl"

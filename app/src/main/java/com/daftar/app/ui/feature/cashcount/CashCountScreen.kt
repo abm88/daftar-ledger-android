@@ -112,7 +112,10 @@ class CashCountViewModel @Inject constructor(
         CashCountUiState(
             rows = rows,
             netVarianceAfn = netVariance,
-            anyEntered = rows.any { (it.variance ?: 0.0) != 0.0 || (it.enteredText.isNotBlank() && it.entered != null) },
+            anyEntered = rows.any { row ->
+                val variance = row.variance
+                variance != null && kotlin.math.abs(variance) > 0.001
+            },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), CashCountUiState())
 
@@ -209,7 +212,7 @@ fun CashCountScreen(
             }
             Box(modifier = Modifier.weight(1f)) {
                 SubmitButton(
-                    label = "Save count",
+                    label = "Save count · خوندي کړه",
                     icon = Icons.Rounded.Check,
                     enabled = state.anyEntered,
                     onClick = { viewModel.save { navController.popBackStack() } },
@@ -223,6 +226,8 @@ fun CashCountScreen(
 private fun CountRow(row: CashCountRow, viewModel: CashCountViewModel) {
     val isMetal = row.asset.type == AssetType.METAL
     val recordedDisplay = Formatters.number(row.recorded, row.asset.decimals) + if (isMetal) " g" else " ${row.asset.code}"
+    // v18 placeholder omits the currency code ("12,450", metals keep the g).
+    val placeholderDisplay = Formatters.number(row.recorded, row.asset.decimals) + if (isMetal) " g" else ""
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -268,7 +273,7 @@ private fun CountRow(row: CashCountRow, viewModel: CashCountViewModel) {
                 Box(modifier = Modifier.weight(1f)) {
                     if (row.enteredText.isEmpty()) {
                         Text(
-                            recordedDisplay,
+                            placeholderDisplay,
                             style = TextStyle(fontFamily = Fraunces, fontWeight = FontWeight.Medium, fontSize = 17.sp, color = DaftarColors.MutedLight),
                         )
                     }

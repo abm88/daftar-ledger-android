@@ -30,6 +30,7 @@ import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Mail
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PersonAdd
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
@@ -289,7 +290,11 @@ fun AuthScreen(viewModel: AuthViewModel = hiltViewModel()) {
                 isSignup -> "Create account · جوړ کړئ"
                 else -> "Sign in · ننوځئ"
             },
-            icon = if (isSignup) Icons.Rounded.PersonAdd else Icons.Rounded.Key,
+            icon = when {
+                state.busy -> Icons.Rounded.Refresh // v18 shows a spinner glyph while busy
+                isSignup -> Icons.Rounded.PersonAdd
+                else -> Icons.Rounded.Key
+            },
             enabled = state.canSubmit,
             onClick = viewModel::submit,
         )
@@ -331,7 +336,7 @@ private fun LocalAccountsBanner() {
         Icon(Icons.Rounded.Shield, contentDescription = null, tint = DaftarColors.Gold, modifier = Modifier.size(14.dp))
         Column {
             Text(
-                text = "LOCAL ACCOUNTS",
+                text = "PROTOTYPE AUTH",
                 style = TextStyle(
                     fontFamily = JetBrainsMono,
                     fontWeight = FontWeight.Bold,
@@ -342,7 +347,7 @@ private fun LocalAccountsBanner() {
             )
             Spacer(Modifier.height(2.dp))
             Text(
-                text = "Accounts are stored on this device only.",
+                text = "Accounts stored on this device only. Not real security.",
                 style = TextStyle(fontFamily = Inter, fontSize = 10.sp, color = DaftarColors.Muted),
             )
         }

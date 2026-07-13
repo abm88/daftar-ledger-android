@@ -41,10 +41,14 @@ class PositionCalculator @Inject constructor() {
             acc.plus(tx.currency, tx.balanceDelta)
         }
 
-    /** Chronological running balances in each transaction's own currency. */
+    /**
+     * Chronological running balances in each transaction's own currency.
+     * v18 sorts by timestamp before accumulating, so backdated inserts still
+     * produce correct balances regardless of storage order.
+     */
     fun runningBalances(customer: Customer): List<TxWithRunningBalance> {
         val running = mutableMapOf<String, Double>()
-        return customer.transactions.map { tx ->
+        return customer.transactions.sortedBy { it.timestampMillis }.map { tx ->
             val before = running[tx.currency] ?: 0.0
             val after = before + tx.balanceDelta
             running[tx.currency] = after

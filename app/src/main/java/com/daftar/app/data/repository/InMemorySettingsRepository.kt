@@ -30,4 +30,8 @@ class InMemorySettingsRepository @Inject constructor() : SettingsRepository {
     override suspend fun setAssetActive(code: String, active: Boolean) {
         state.update { it.copy(activeAssetOverrides = it.activeAssetOverrides + (code to active)) }
     }
+
+    override suspend fun replaceSettings(settings: LedgerSettings) {
+        state.value = settings
+    }
 }

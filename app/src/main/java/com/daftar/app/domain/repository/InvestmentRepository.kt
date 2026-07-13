@@ -11,4 +11,7 @@ interface InvestmentRepository {
 
     /** Remove all entries — a fresh account starts with a blank shop. */
     suspend fun clearAll()
+
+    /** Swap in another account's investment log (per-user persistence restore). */
+    suspend fun replaceAll(investments: List<Investment>)
 }

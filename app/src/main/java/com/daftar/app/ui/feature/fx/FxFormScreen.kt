@@ -22,10 +22,12 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.automirrored.rounded.TrendingDown
 import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.ArrowDownward
+import androidx.compose.material.icons.rounded.Balance
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
@@ -53,6 +55,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.daftar.app.core.format.Formatters
+import com.daftar.app.domain.model.AssetCatalog
 import com.daftar.app.ui.common.BigAmountInput
 import com.daftar.app.ui.common.FieldBox
 import com.daftar.app.ui.common.FieldTextInput
@@ -113,13 +116,22 @@ fun FxFormScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 18.dp),
         ) {
-            MonoLabel("You give → customer gets · د تبادلې اسعار", fontSize = 9)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Icon(
+                    Icons.Rounded.Refresh, null,
+                    tint = DaftarColors.Muted,
+                    modifier = Modifier.size(11.dp),
+                )
+                MonoLabel("You give → customer gets · د تبادلې اسعار", fontSize = 9)
+            }
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 FxCurrencyCard(
                     code = form.fromCurrency,
                     name = CurrencyNames[form.fromCurrency] ?: form.fromCurrency,
-                    detail = Formatters.amount(state.availableCash, form.fromCurrency) + " in drawer",
+                    // v18 shows the currency symbol with the drawer amount.
+                    detail = Formatters.amount(state.availableCash, form.fromCurrency) + " " +
+                        AssetCatalog.symbolFor(form.fromCurrency) + " in drawer",
                     highlight = true,
                     modifier = Modifier.weight(1f),
                 ) { viewModel.openPicker(FxLeg.FROM) }
@@ -137,7 +149,8 @@ fun FxFormScreen(
                 FxCurrencyCard(
                     code = form.toCurrency,
                     name = CurrencyNames[form.toCurrency] ?: form.toCurrency,
-                    detail = "customer gets",
+                    // v18 shows the destination currency's symbol here.
+                    detail = AssetCatalog.symbolFor(form.toCurrency),
                     highlight = false,
                     modifier = Modifier.weight(1f),
                 ) { viewModel.openPicker(FxLeg.TO) }
@@ -145,6 +158,7 @@ fun FxFormScreen(
 
             Spacer(Modifier.height(18.dp))
             BigAmountInput(
+                prefixSymbol = AssetCatalog.symbolFor(form.fromCurrency),
                 value = form.fromAmountText,
                 onValueChange = viewModel::setAmount,
                 currency = form.fromCurrency,
@@ -166,7 +180,14 @@ fun FxFormScreen(
             )
 
             Spacer(Modifier.height(18.dp))
-            MonoLabel("Today's rate · د نرخ", fontSize = 9)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Icon(
+                    Icons.Rounded.Balance, null,
+                    tint = DaftarColors.Muted,
+                    modifier = Modifier.size(11.dp),
+                )
+                MonoLabel("Today's rate · د نرخ", fontSize = 9)
+            }
             Spacer(Modifier.height(8.dp))
             Column(
                 modifier = Modifier
@@ -539,6 +560,7 @@ fun FxFormScreen(
 
                 Spacer(Modifier.height(16.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    // v18 gives Edit a back arrow and both buttons equal widths.
                     Row(
                         modifier = Modifier
                             .weight(1f)
@@ -547,7 +569,14 @@ fun FxFormScreen(
                             .clickable(onClick = viewModel::backToForm)
                             .padding(vertical = 14.dp),
                         horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        Icon(
+                            Icons.AutoMirrored.Rounded.ArrowBack, null,
+                            tint = DaftarColors.Ink,
+                            modifier = Modifier.size(13.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
                         Text(
                             "EDIT",
                             style = TextStyle(fontFamily = JetBrainsMono, fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 0.08.em, color = DaftarColors.Ink),
@@ -555,7 +584,7 @@ fun FxFormScreen(
                     }
                     Row(
                         modifier = Modifier
-                            .weight(2f)
+                            .weight(1f)
                             .clip(RoundedCornerShape(14.dp))
                             .background(DaftarColors.Green)
                             .clickable {

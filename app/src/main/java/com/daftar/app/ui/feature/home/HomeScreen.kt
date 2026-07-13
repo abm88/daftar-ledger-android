@@ -13,6 +13,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,8 +36,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -50,9 +56,17 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import androidx.compose.ui.graphics.Brush
 import com.daftar.app.domain.model.LedgerEntry
+import com.daftar.app.ui.common.CountPill
 import com.daftar.app.ui.common.IconSquareButton
 import com.daftar.app.ui.common.MonoLabel
+import com.daftar.app.ui.common.SyncIconButton
+import com.daftar.app.ui.common.DashedDivider
+import com.daftar.app.ui.common.dashedBorder
+import com.daftar.app.ui.common.dashedVerticalLine
+import com.daftar.app.ui.components.EmptyState
+import com.daftar.app.ui.components.EmptyStateTone
 import com.daftar.app.ui.components.ledgerFeedItems
 import com.daftar.app.ui.feature.rates.UpdateRatesSheet
 import com.daftar.app.ui.navigation.DaftarDestinations
@@ -61,6 +75,15 @@ import com.daftar.app.ui.theme.Fraunces
 import com.daftar.app.ui.theme.Inter
 import com.daftar.app.ui.theme.JetBrainsMono
 import com.daftar.app.ui.theme.NotoNaskhArabic
+import kotlinx.coroutines.delay
+
+/**
+ * Once-per-process guard for the first-run FAB tooltip, mirroring v18's
+ * in-memory fabTooltipSeen flag (deliberately not persisted).
+ */
+internal object FabTooltipSession {
+    var seen: Boolean = false
+}
 
 /** Home tab: greeting, cash-on-hand card, ledger preview, New Entry FAB. */
 @Composable
@@ -73,12 +96,34 @@ fun HomeScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var ratesSheetOpen by rememberSaveable { mutableStateOf(false) }
 
+    // v18 first-visit tooltip: shows ~0.8s after the splash clears (2.8s from
+    // boot), auto-fades after 4.5s, and is marked seen once the FAB is used.
+    // The balloon markup is reconstructed from v18's CSS — the prototype ships
+    // the styles/handlers but never emits the element.
+    var fabTooltipVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (!FabTooltipSession.seen) {
+            delay(2800)
+            if (!FabTooltipSession.seen) {
+                fabTooltipVisible = true
+                delay(4500)
+                fabTooltipVisible = false
+                FabTooltipSession.seen = true
+            }
+        }
+    }
+    val openNewEntry = {
+        FabTooltipSession.seen = true
+        fabTooltipVisible = false
+        onOpenNewEntry()
+    }
+
     Box(modifier = Modifier.fillMaxWidth()) {
         LazyColumn(
             modifier = Modifier.statusBarsPadding(),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 120.dp),
         ) {
-            item { HomeHeader(state, onSync = viewModel::sync) }
+            item { HomeHeader(state, syncing = state.syncing, onSync = viewModel::sync) }
 
             if (state.setupNeeded) {
                 item {
@@ -95,87 +140,177 @@ fun HomeScreen(
                 )
             }
 
-            item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Rounded.MenuBook,
-                        contentDescription = null,
-                        tint = DaftarColors.Muted,
-                        modifier = Modifier.size(12.dp),
+            if (state.feedTotal == 0) {
+                // v18: an empty feed replaces the whole section (header included)
+                // with the rich zero-state and its New Entry CTA.
+                item {
+                    EmptyState(
+                        icon = Icons.AutoMirrored.Rounded.MenuBook,
+                        title = "No activity yet",
+                        pashto = "تر اوسه هیڅ فعالیت نشته",
+                        sub = "Your trades, hawalas, and account entries will appear here as you record them. Tap New Entry to begin.",
+                        tone = EmptyStateTone.COPPER,
+                        ctaLabel = "New Entry · نوې لیکنه",
+                        ctaIcon = Icons.Rounded.Add,
+                        onCta = openNewEntry,
                     )
-                    MonoLabel("General Ledger · عمومي دفتر")
-                    HorizontalDivider(modifier = Modifier.weight(1f), color = DaftarColors.Line)
-                    if (state.feedTotal > state.feedPreview.size) {
-                        Text(
-                            text = "View all ${state.feedTotal} →",
-                            style = TextStyle(
-                                fontFamily = JetBrainsMono,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 10.sp,
-                                color = DaftarColors.Copper,
-                            ),
-                            modifier = Modifier.clickable(onClick = onViewAllLedger),
-                        )
-                    }
                 }
-            }
-
-            ledgerFeedItems(
-                entries = state.feedPreview,
-                todayStartMillis = state.todayStartMillis,
-                onOpen = { entry -> openLedgerEntry(entry, navController) },
-            )
-
-            if (state.feedTotal > state.feedPreview.size) {
+            } else {
                 item {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 10.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .border(1.dp, DaftarColors.LineStrong, RoundedCornerShape(12.dp))
-                            .clickable(onClick = onViewAllLedger)
-                            .padding(vertical = 12.dp),
-                        horizontalArrangement = Arrangement.Center,
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Rounded.MenuBook,
                             contentDescription = null,
-                            tint = DaftarColors.InkSoft,
-                            modifier = Modifier.size(13.dp),
+                            tint = DaftarColors.Muted,
+                            modifier = Modifier.size(12.dp),
                         )
-                        Spacer(modifier = Modifier.size(8.dp))
-                        Text(
-                            text = "View full ledger · ${state.feedTotal} entries",
-                            style = TextStyle(
-                                fontFamily = Inter,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 12.sp,
-                                color = DaftarColors.InkSoft,
-                            ),
-                        )
+                        MonoLabel("General Ledger · عمومي دفتر")
+                        HorizontalDivider(modifier = Modifier.weight(1f), color = DaftarColors.Line)
+                        if (state.feedTotal > state.feedPreview.size) {
+                            // v18 uppercases the link and paints it copper-deep.
+                            Text(
+                                text = "VIEW ALL ${state.feedTotal} →",
+                                style = TextStyle(
+                                    fontFamily = JetBrainsMono,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 10.sp,
+                                    color = DaftarColors.CopperDeep,
+                                ),
+                                modifier = Modifier.clickable(onClick = onViewAllLedger),
+                            )
+                        } else {
+                            // Everything fits — v18 shows a copper count pill instead.
+                            CountPill(state.feedTotal)
+                        }
+                    }
+                }
+
+                ledgerFeedItems(
+                    entries = state.feedPreview,
+                    todayStartMillis = state.todayStartMillis,
+                    onOpen = { entry -> openLedgerEntry(entry, navController) },
+                )
+
+                if (state.feedTotal > state.feedPreview.size) {
+                    item {
+                        // v18 footer: dashed gold-tinted button, mono copper text, chevron.
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp, vertical = 10.dp)
+                                .dashedBorder(DaftarColors.Gold.copy(alpha = 0.4f), 1.5.dp, 12.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(DaftarColors.Gold.copy(alpha = 0.08f))
+                                .clickable(onClick = onViewAllLedger)
+                                .padding(vertical = 12.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.MenuBook,
+                                contentDescription = null,
+                                tint = DaftarColors.CopperDeep,
+                                modifier = Modifier.size(13.dp),
+                            )
+                            Spacer(modifier = Modifier.size(8.dp))
+                            Text(
+                                text = "VIEW FULL LEDGER · ${state.feedTotal} ENTRIES",
+                                style = TextStyle(
+                                    fontFamily = JetBrainsMono,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp,
+                                    letterSpacing = 0.08.em,
+                                    color = DaftarColors.CopperDeep,
+                                ),
+                            )
+                            Spacer(modifier = Modifier.size(6.dp))
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                                contentDescription = null,
+                                tint = DaftarColors.CopperDeep,
+                                modifier = Modifier.size(13.dp),
+                            )
+                        }
                     }
                 }
             }
         }
 
         NewEntryFab(
-            onClick = onOpenNewEntry,
+            onClick = openNewEntry,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = 20.dp, bottom = 20.dp),
         )
+
+        if (fabTooltipVisible) {
+            FabTooltipBalloon(
+                onDismiss = {
+                    FabTooltipSession.seen = true
+                    fabTooltipVisible = false
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 24.dp, bottom = 92.dp),
+            )
+        }
     }
 
     if (ratesSheetOpen) {
         UpdateRatesSheet(onDismiss = { ratesSheetOpen = false })
+    }
+}
+
+/** Ink balloon with a gold ring nudging first-time users toward the FAB. */
+@Composable
+private fun FabTooltipBalloon(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(DaftarColors.Ink)
+            .border(1.dp, DaftarColors.Gold.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+            .clickable(onClick = onDismiss)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = "New Entry",
+                style = TextStyle(
+                    fontFamily = Fraunces,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 14.sp,
+                    color = DaftarColors.Paper,
+                ),
+            )
+            Text(
+                text = "نوې لیکنه",
+                style = TextStyle(
+                    fontFamily = NotoNaskhArabic,
+                    fontSize = 11.sp,
+                    color = DaftarColors.GoldSoft,
+                    textDirection = TextDirection.Rtl,
+                ),
+            )
+        }
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = "RECORD A TRADE, HAWALA, OR ACCOUNT ENTRY",
+            style = TextStyle(
+                fontFamily = JetBrainsMono,
+                fontSize = 8.sp,
+                letterSpacing = 0.08.em,
+                color = DaftarColors.MutedLight,
+            ),
+        )
     }
 }
 
@@ -193,7 +328,7 @@ fun openLedgerEntry(entry: LedgerEntry, navController: NavController) {
 }
 
 @Composable
-private fun HomeHeader(state: HomeUiState, onSync: () -> Unit) {
+private fun HomeHeader(state: HomeUiState, syncing: Boolean, onSync: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -245,7 +380,8 @@ private fun HomeHeader(state: HomeUiState, onSync: () -> Unit) {
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            IconSquareButton(icon = Icons.Rounded.Refresh, onClick = onSync)
+            SyncIconButton(syncing = syncing, onClick = onSync)
+            // TODO(backend): notifications feed — static bell with a dot for now (parity with v18).
             IconSquareButton(icon = Icons.Rounded.Notifications, onClick = {}, showDot = true)
         }
     }
@@ -253,13 +389,15 @@ private fun HomeHeader(state: HomeUiState, onSync: () -> Unit) {
 
 @Composable
 private fun SetupWelcomeCard(onClick: () -> Unit) {
+    // v18: copper gradient card, translucent-white icon tile with gold briefcase,
+    // "Set up your daftar" serif title.
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
             .padding(bottom = 14.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(DaftarColors.Ink)
+            .clip(RoundedCornerShape(18.dp))
+            .background(Brush.linearGradient(listOf(DaftarColors.Copper, DaftarColors.CopperDeep)))
             .clickable(onClick = onClick)
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -267,32 +405,33 @@ private fun SetupWelcomeCard(onClick: () -> Unit) {
     ) {
         Box(
             modifier = Modifier
-                .size(40.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(DaftarColors.Copper),
+                .size(44.dp)
+                .clip(RoundedCornerShape(13.dp))
+                .background(Color.White.copy(alpha = 0.16f))
+                .border(1.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(13.dp)),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = Icons.Rounded.BusinessCenter,
                 contentDescription = null,
-                tint = DaftarColors.Paper,
-                modifier = Modifier.size(18.dp),
+                tint = DaftarColors.GoldSoft,
+                modifier = Modifier.size(19.dp),
             )
         }
         Column(modifier = Modifier.weight(1f)) {
             MonoLabel("Get started", color = DaftarColors.GoldSoft, fontSize = 9)
             Text(
-                text = "Set up your shop",
+                text = "Set up your daftar",
                 style = TextStyle(
                     fontFamily = Fraunces,
                     fontWeight = FontWeight.Medium,
-                    fontSize = 17.sp,
+                    fontSize = 20.sp,
                     color = DaftarColors.Paper,
                 ),
             )
             Text(
                 text = "Enter the cash and metals in your drawer to start trading.",
-                style = TextStyle(fontFamily = Inter, fontSize = 11.sp, color = DaftarColors.MutedLight),
+                style = TextStyle(fontFamily = Inter, fontSize = 12.sp, color = Color.White.copy(alpha = 0.78f)),
             )
         }
         Icon(
@@ -305,7 +444,9 @@ private fun SetupWelcomeCard(onClick: () -> Unit) {
 
 @Composable
 private fun CashCard(state: HomeUiState, onEditRates: () -> Unit) {
-    Column(
+    // v18 ornaments: inner dashed copper frame and a large low-opacity
+    // "صندوق" watermark in the bottom-right corner.
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
@@ -314,6 +455,24 @@ private fun CashCard(state: HomeUiState, onEditRates: () -> Unit) {
             .background(DaftarColors.PaperSoft)
             .border(1.5.dp, DaftarColors.Copper, RoundedCornerShape(20.dp)),
     ) {
+        Text(
+            text = "صندوق",
+            style = TextStyle(
+                fontFamily = NotoNaskhArabic,
+                fontSize = 64.sp,
+                color = DaftarColors.Ink.copy(alpha = 0.06f),
+            ),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 10.dp),
+        )
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .padding(4.dp)
+                .dashedBorder(DaftarColors.Copper.copy(alpha = 0.25f), 1.dp, 16.dp),
+        )
+    Column {
         // Header
         Row(
             modifier = Modifier
@@ -368,19 +527,40 @@ private fun CashCard(state: HomeUiState, onEditRates: () -> Unit) {
                 )
             }
         }
-        HorizontalDivider(color = DaftarColors.Copper.copy(alpha = 0.18f))
+        DashedDivider(color = DaftarColors.Copper.copy(alpha = 0.25f))
 
-        // Asset grid — 3 columns
+        // Asset grid — 3 columns with v18's dashed separators between cells
+        // and between rows.
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(DaftarColors.PaperDeep)
                 .padding(horizontal = 8.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            state.cells.chunked(3).forEach { rowCells ->
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    rowCells.forEach { cell -> CashCellView(cell, Modifier.weight(1f)) }
+            val rows = state.cells.chunked(3)
+            rows.forEachIndexed { rowIndex, rowCells ->
+                if (rowIndex > 0) {
+                    DashedDivider(
+                        color = DaftarColors.Ink.copy(alpha = 0.12f),
+                        modifier = Modifier.padding(vertical = 10.dp),
+                    )
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Min),
+                ) {
+                    rowCells.forEachIndexed { cellIndex, cell ->
+                        if (cellIndex > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .width(1.dp)
+                                    .fillMaxHeight()
+                                    .dashedVerticalLine(DaftarColors.Ink.copy(alpha = 0.12f)),
+                            )
+                        }
+                        CashCellView(cell, Modifier.weight(1f))
+                    }
                     repeat(3 - rowCells.size) { Spacer(modifier = Modifier.weight(1f)) }
                 }
             }
@@ -446,6 +626,7 @@ private fun CashCard(state: HomeUiState, onEditRates: () -> Unit) {
                 )
             }
         }
+    }
     }
 }
 
