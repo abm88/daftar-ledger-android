@@ -57,4 +57,8 @@ class InMemoryRatesRepository @Inject constructor(seed: SeedData) : RatesReposit
             RateBook(perAsset = perAsset, pairs = pairs)
         }
     }
+
+    override suspend fun replaceAll(book: RateBook) {
+        state.value = book
+    }
 }

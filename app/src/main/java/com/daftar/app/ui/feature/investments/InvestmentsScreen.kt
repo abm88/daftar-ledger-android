@@ -75,6 +75,8 @@ import com.daftar.app.ui.common.ToastCenter
 import com.daftar.app.ui.common.ToastIcon
 import com.daftar.app.ui.common.sanitizeAmountInput
 import com.daftar.app.ui.feature.statements.StatementHeaderBar
+import com.daftar.app.ui.components.EmptyState
+import com.daftar.app.ui.components.EmptyStateTone
 import com.daftar.app.ui.theme.DaftarColors
 import com.daftar.app.ui.theme.Fraunces
 import com.daftar.app.ui.theme.Inter
@@ -126,7 +128,10 @@ class InvestmentsViewModel @Inject constructor(
         ratesRepository.rateBook,
         settingsRepository.settings,
     ) { investments, drawer, rates, settings ->
+        // v18 builds assetTotals while walking entries newest-first, so assets
+        // appear in most-recently-touched order.
         val perAsset = investments
+            .sortedByDescending { it.timestampMillis }
             .groupBy { it.assetCode }
             .mapNotNull { (code, list) ->
                 val asset = AssetCatalog.byCode(code) ?: return@mapNotNull null
@@ -260,14 +265,19 @@ fun InvestmentsScreen(
                             MonoLabel("Net return", color = DaftarColors.Paper.copy(alpha = 0.8f), fontSize = 9)
                         }
                         Text(
-                            text = Formatters.signPrefix(state.roiAbsolute, 0.5).ifEmpty { "" } +
+                            // v18 signs any non-zero return; near-zero renders flat.
+                            text = Formatters.signPrefix(state.roiAbsolute) +
                                 Formatters.compact(abs(state.roiAbsolute), state.reportingDecimals) +
                                 " ${state.reportingCurrency} · " +
-                                Formatters.signPrefix(state.roiAbsolute, 0.5) +
+                                Formatters.signPrefix(state.roiAbsolute) +
                                 Formatters.rate(abs(state.roiPercent), 1) + "%",
                             style = TextStyle(
                                 fontFamily = JetBrainsMono, fontWeight = FontWeight.Bold, fontSize = 11.sp,
-                                color = if (state.roiAbsolute >= 0) DaftarColors.LongGreen else DaftarColors.ShortRed,
+                                color = when {
+                                    abs(state.roiAbsolute) <= 0.5 -> DaftarColors.GoldSoft
+                                    state.roiAbsolute > 0 -> DaftarColors.LongGreen
+                                    else -> DaftarColors.ShortRed
+                                },
                             ),
                         )
                     }
@@ -341,19 +351,16 @@ fun InvestmentsScreen(
 
             if (state.entries.isEmpty()) {
                 item {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 30.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Icon(Icons.Rounded.BusinessCenter, null, tint = DaftarColors.Muted, modifier = Modifier.size(24.dp))
-                        Spacer(Modifier.height(10.dp))
-                        Text(
-                            "No investment entries yet",
-                            style = TextStyle(fontFamily = Inter, fontSize = 13.sp, color = DaftarColors.Muted),
-                        )
-                    }
+                    EmptyState(
+                        icon = Icons.Rounded.BusinessCenter,
+                        title = "No investments yet",
+                        pashto = "تر اوسه هیڅ پانګه نشته",
+                        sub = "Record your opening capital and any top-ups or withdrawals to track your equity and ROI.",
+                        tone = EmptyStateTone.COPPER,
+                        ctaLabel = "Add entry · نوې لیکنه",
+                        ctaIcon = Icons.Rounded.Add,
+                        onCta = { addOpen = true },
+                    )
                 }
             } else {
                 items(count = state.entries.size, key = { i -> state.entries[i].id }) { i ->
@@ -446,7 +453,7 @@ private fun InvestmentEntryRow(entry: Investment) {
                 ),
             )
             MonoLabel(
-                entry.assetCode + if (asset?.type == AssetType.METAL) "·g" else "",
+                entry.assetCode + if (asset?.type == AssetType.METAL) "g" else "",
                 fontSize = 8, letterSpacing = 0.1,
             )
         }

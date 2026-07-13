@@ -22,6 +22,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -56,6 +57,8 @@ import com.daftar.app.ui.common.DaftarFilterChip
 import com.daftar.app.ui.common.DaftarSearchField
 import com.daftar.app.ui.common.MonoLabel
 import com.daftar.app.ui.feature.accounts.EmptyNote
+import com.daftar.app.ui.components.EmptyState
+import com.daftar.app.ui.components.EmptyStateTone
 import com.daftar.app.ui.navigation.DaftarDestinations
 import com.daftar.app.ui.theme.DaftarColors
 import com.daftar.app.ui.theme.Fraunces
@@ -271,7 +274,24 @@ fun HawalasScreen(
             }
 
             if (state.isEmpty) {
-                item { EmptyNote("No hawalas match your filters") }
+                if (state.totalCount == 0) {
+                    // v18 first-run state — filters can't be the reason when
+                    // there are no hawalas at all.
+                    item {
+                        EmptyState(
+                            icon = Icons.AutoMirrored.Rounded.Send,
+                            title = "No hawalas yet",
+                            pashto = "تر اوسه هیڅ حواله نشته",
+                            sub = "Send money through a partner saraf. Create your first hawala and it will appear here with its pickup code.",
+                            tone = EmptyStateTone.COPPER,
+                            ctaLabel = "New hawala · نوې حواله",
+                            ctaIcon = Icons.Rounded.Add,
+                            onCta = { navController.navigate(DaftarDestinations.newHawala()) },
+                        )
+                    }
+                } else {
+                    item { EmptyNote("No hawalas match your filters") }
+                }
             } else {
                 listOf(
                     "Today" to state.today,

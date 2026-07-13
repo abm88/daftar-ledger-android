@@ -27,6 +27,7 @@ import androidx.compose.material.icons.rounded.BusinessCenter
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Group
+import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material.icons.rounded.Tag
@@ -147,8 +148,9 @@ fun NewHawalaScreen(
             Spacer(Modifier.height(14.dp))
             BigAmountInput(
                 value = form.amountText,
-                onValueChange = { text -> viewModel.update { it.copy(amountText = text) } },
+                onValueChange = { text -> viewModel.update { it.copy(amountText = text, amountError = false) } },
                 currency = form.currency,
+                error = form.amountError,
             )
 
             Spacer(Modifier.height(12.dp))
@@ -312,13 +314,34 @@ fun NewHawalaScreen(
             state = state,
             onDismiss = { viewModel.update { it.copy(picker = HawalaPicker.NONE) } },
             onPick = viewModel::pickPartner,
+            onAddBranch = { viewModel.update { it.copy(addPartnerOpen = true) } },
         )
         HawalaPicker.SENDER_ACCOUNT -> SenderAccountPickerSheet(
             state = state,
             onDismiss = { viewModel.update { it.copy(picker = HawalaPicker.NONE) } },
             onPick = viewModel::pickSenderCustomer,
+            onCreateAccount = { viewModel.update { it.copy(addCustomerOpen = true) } },
         )
         HawalaPicker.NONE -> Unit
+    }
+
+    // v18 picker-context add flows: the draft hawala survives, and the new
+    // branch/account is auto-selected on save.
+    if (form.addPartnerOpen) {
+        com.daftar.app.ui.feature.accounts.AddPartnerSheet(
+            onDismiss = { viewModel.update { it.copy(addPartnerOpen = false) } },
+            onSave = { name, shortName, initial, phone, city, tier, openings ->
+                viewModel.addPartnerAndSelect(name, shortName, initial, phone, city, tier, openings)
+            },
+        )
+    }
+    if (form.addCustomerOpen) {
+        com.daftar.app.ui.feature.accounts.AddCustomerSheet(
+            onDismiss = { viewModel.update { it.copy(addCustomerOpen = false) } },
+            onSave = { name, shortName, initial, phone, city, notes, openings ->
+                viewModel.addCustomerAndSelectSender(name, shortName, initial, phone, city, notes, openings)
+            },
+        )
     }
 
     if (form.confirming) {
@@ -419,7 +442,9 @@ private fun CommissionBlock(state: NewHawalaUiState, viewModel: NewHawalaViewMod
             }
             if (state.amount > 0 || !isPercent) {
                 Text(
-                    text = Formatters.amount(state.commissionAmount, form.currency) + " " + form.currency +
+                    // v18 renders a bare "0" when the commission is zero.
+                    text = (if (state.commissionAmount == 0.0) "0" else Formatters.amount(state.commissionAmount, form.currency)) +
+                        " " + form.currency +
                         (if (isPercent && state.commissionAmount > 0) " · ${Formatters.rate(form.commissionPercent, 1)}%" else ""),
                     style = TextStyle(
                         fontFamily = Fraunces,
@@ -429,7 +454,13 @@ private fun CommissionBlock(state: NewHawalaUiState, viewModel: NewHawalaViewMod
                     ),
                 )
             } else {
-                MonoLabel("Enter amount first", fontSize = 9, letterSpacing = 0.05)
+                Text(
+                    "enter amount first", // v18 keeps this lowercase
+                    style = TextStyle(
+                        fontFamily = JetBrainsMono, fontWeight = FontWeight.Bold,
+                        fontSize = 9.sp, letterSpacing = 0.05.em, color = DaftarColors.Muted,
+                    ),
+                )
             }
         }
         Spacer(Modifier.height(10.dp))
@@ -702,11 +733,24 @@ private fun PartnerPickerSheet(
     state: NewHawalaUiState,
     onDismiss: () -> Unit,
     onPick: (com.daftar.app.domain.model.Counterparty) -> Unit,
+    onAddBranch: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = DaftarColors.Paper, dragHandle = { SheetHandle() }) {
         Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
             Text("Choose partner", style = TextStyle(fontFamily = Fraunces, fontWeight = FontWeight.Medium, fontSize = 18.sp, color = DaftarColors.Ink))
             Spacer(Modifier.height(12.dp))
+            if (state.partners.isEmpty()) {
+                // v18: no branches yet — offer to add one without losing the draft.
+                com.daftar.app.ui.components.EmptyState(
+                    icon = Icons.Rounded.Group,
+                    title = "No branches yet",
+                    sub = "Add a partner saraf (branch) to send this hawala through.",
+                    tone = com.daftar.app.ui.components.EmptyStateTone.COPPER,
+                    ctaLabel = "Add branch · نوې څانګه",
+                    ctaIcon = Icons.Rounded.PersonAdd,
+                    onCta = onAddBranch,
+                )
+            }
             state.partners.forEach { partner ->
                 Row(
                     modifier = Modifier
@@ -735,7 +779,33 @@ private fun PartnerPickerSheet(
                     }
                 }
             }
+            if (state.partners.isNotEmpty()) {
+                PickerAddRow(label = "Add new branch · نوې څانګه", onClick = onAddBranch)
+            }
         }
+    }
+}
+
+/** Dashed footer row inside pickers — v18's picker-add-row. */
+@Composable
+private fun PickerAddRow(label: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp)
+            .dashedBorder(DaftarColors.LineDashed, 1.5.dp, 12.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Rounded.PersonAdd, null, tint = DaftarColors.InkSoft, modifier = Modifier.size(14.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(
+            label,
+            style = TextStyle(fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = DaftarColors.InkSoft),
+        )
     }
 }
 
@@ -745,6 +815,7 @@ private fun SenderAccountPickerSheet(
     state: NewHawalaUiState,
     onDismiss: () -> Unit,
     onPick: (com.daftar.app.domain.model.Customer) -> Unit,
+    onCreateAccount: () -> Unit,
 ) {
     // Funded accounts first, matching the prototype ordering.
     val sorted = state.customers.sortedWith(
@@ -760,6 +831,18 @@ private fun SenderAccountPickerSheet(
                 style = TextStyle(fontFamily = JetBrainsMono, fontSize = 11.sp, color = DaftarColors.Muted),
             )
             Spacer(Modifier.height(12.dp))
+            if (state.customers.isEmpty()) {
+                // v18: funding from a wallet needs an account first.
+                com.daftar.app.ui.components.EmptyState(
+                    icon = Icons.Rounded.Person,
+                    title = "No accounts yet",
+                    sub = "To fund a hawala from a customer's balance, first create a customer account.",
+                    tone = com.daftar.app.ui.components.EmptyStateTone.COPPER,
+                    ctaLabel = "Create account · نوی حساب",
+                    ctaIcon = Icons.Rounded.PersonAdd,
+                    onCta = onCreateAccount,
+                )
+            }
             sorted.forEach { customer ->
                 val balance = state.customerBalances[customer.id] ?: 0.0
                 val hasFunds = balance > 0
@@ -814,6 +897,9 @@ private fun SenderAccountPickerSheet(
                         Icon(Icons.Rounded.Check, null, tint = DaftarColors.Green, modifier = Modifier.size(14.dp))
                     }
                 }
+            }
+            if (state.customers.isNotEmpty()) {
+                PickerAddRow(label = "Add new account · نوی حساب", onClick = onCreateAccount)
             }
         }
     }
@@ -872,17 +958,35 @@ private fun ConfirmHawalaSheet(
             }
 
             Spacer(Modifier.height(12.dp))
+            // v18 gives each row a colored leading icon.
             ConfirmRow(
                 "Sender · لیږونکی",
                 state.senderCustomer?.name ?: form.senderName,
                 if (form.senderMode == SenderMode.ACCOUNT) "FROM ACCOUNT" else "CASH",
+                icon = Icons.Rounded.ArrowUpward,
+                iconTint = DaftarColors.Red,
             )
-            ConfirmRow("Receiver · ترلاسه کوونکی", form.receiverName, form.toCity.code)
-            ConfirmRow("Partner", state.partner?.shortName ?: "—", state.partner?.city?.displayName ?: "—")
+            ConfirmRow(
+                "Receiver · ترلاسه کوونکی", form.receiverName, form.toCity.code,
+                icon = Icons.Rounded.ArrowDownward,
+                iconTint = DaftarColors.Green,
+            )
+            ConfirmRow(
+                "Partner", state.partner?.shortName ?: "—", state.partner?.city?.displayName ?: "—",
+                icon = Icons.Rounded.Group,
+                iconTint = DaftarColors.InkSoft,
+                // v18 leaves the partner city aside in normal case.
+                uppercaseAside = false,
+            )
             ConfirmRow(
                 "Commission",
                 if (form.commissionMode == CommissionMode.FIXED) "Fixed" else "${Formatters.rate(form.commissionPercent, 1)}%",
                 Formatters.amount(state.commissionAmount, form.currency) + " " + form.currency,
+                icon = Icons.Rounded.Tag,
+                iconTint = DaftarColors.Copper,
+                // v18 styles the commission amount in copper serif.
+                asideColor = DaftarColors.Copper,
+                uppercaseAside = false,
             )
             if (form.senderMode == SenderMode.ACCOUNT && state.senderCustomer != null) {
                 Row(
@@ -914,16 +1018,18 @@ private fun ConfirmHawalaSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .dashedBorder(DaftarColors.Copper, 1.5.dp, 12.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(DaftarColors.Ink)
                     .padding(vertical = 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                MonoLabel("Pickup code · د پیسو کوډ", color = DaftarColors.CopperDeep, fontSize = 9)
+                MonoLabel("Pickup code · د پیسو کوډ", color = DaftarColors.GoldSoft, fontSize = 9)
                 Spacer(Modifier.height(4.dp))
                 Text(
                     text = form.pickupCode.toCharArray().joinToString(" "),
                     style = TextStyle(
                         fontFamily = JetBrainsMono, fontWeight = FontWeight.Bold,
-                        fontSize = 24.sp, color = DaftarColors.Ink,
+                        fontSize = 26.sp, color = DaftarColors.Paper,
                     ),
                 )
             }
@@ -987,7 +1093,15 @@ private fun ConfirmCity(code: String, name: String) {
 }
 
 @Composable
-fun ConfirmRow(label: String, value: String, aside: String) {
+fun ConfirmRow(
+    label: String,
+    value: String,
+    aside: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    iconTint: androidx.compose.ui.graphics.Color = DaftarColors.InkSoft,
+    asideColor: androidx.compose.ui.graphics.Color = DaftarColors.Muted,
+    uppercaseAside: Boolean = true,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -999,6 +1113,18 @@ fun ConfirmRow(label: String, value: String, aside: String) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (icon != null) {
+            Box(
+                modifier = Modifier
+                    .padding(end = 10.dp)
+                    .size(26.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(iconTint.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(icon, null, tint = iconTint, modifier = Modifier.size(13.dp))
+            }
+        }
         Column(modifier = Modifier.weight(1f)) {
             MonoLabel(label, fontSize = 9)
             Spacer(Modifier.height(2.dp))
@@ -1013,8 +1139,8 @@ fun ConfirmRow(label: String, value: String, aside: String) {
             )
         }
         Text(
-            text = aside.uppercase(),
-            style = TextStyle(fontFamily = JetBrainsMono, fontSize = 10.sp, color = DaftarColors.Muted),
+            text = if (uppercaseAside) aside.uppercase() else aside,
+            style = TextStyle(fontFamily = JetBrainsMono, fontSize = 10.sp, color = asideColor),
         )
     }
 }

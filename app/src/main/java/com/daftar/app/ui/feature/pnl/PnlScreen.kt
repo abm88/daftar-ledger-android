@@ -53,6 +53,8 @@ import com.daftar.app.domain.usecase.CurrencyConverter
 import com.daftar.app.domain.usecase.PnlCalculator
 import com.daftar.app.ui.common.DaftarFilterChip
 import com.daftar.app.ui.common.MonoLabel
+import com.daftar.app.ui.components.EmptyState
+import com.daftar.app.ui.components.EmptyStateTone
 import com.daftar.app.ui.feature.statements.StatementHeaderBar
 import com.daftar.app.ui.theme.DaftarColors
 import com.daftar.app.ui.theme.Fraunces
@@ -75,6 +77,11 @@ data class PnlUiState(
     val toReporting: (Double) -> Double = { it },
 )
 
+/** Process-wide memory of the last chosen P&L period (v18 state.pnlPeriod). */
+private object PnlPeriodHolder {
+    var last: LedgerPeriod = LedgerPeriod.ALL
+}
+
 @HiltViewModel
 class PnlViewModel @Inject constructor(
     fxRepository: FxRepository,
@@ -86,7 +93,9 @@ class PnlViewModel @Inject constructor(
     converter: CurrencyConverter,
 ) : ViewModel() {
 
-    private val period = MutableStateFlow(LedgerPeriod.ALL)
+    // v18 keeps state.pnlPeriod across close/reopen; a fresh ViewModel would
+    // otherwise reset to ALL every time the screen is entered.
+    private val period = MutableStateFlow(PnlPeriodHolder.last)
 
     val uiState = combine(
         combine(fxRepository.trades, partnerRepository.partners) { t, p -> t to p },
@@ -104,7 +113,10 @@ class PnlViewModel @Inject constructor(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PnlUiState())
 
-    fun setPeriod(value: LedgerPeriod) { period.value = value }
+    fun setPeriod(value: LedgerPeriod) {
+        period.value = value
+        PnlPeriodHolder.last = value
+    }
 }
 
 /** P&L ledger: period chips, headline, per-source cards, entry breakdown. */
@@ -150,17 +162,14 @@ fun PnlScreen(
             item {
                 val profit = grandRep > 0.5
                 val loss = grandRep < -0.5
+                // v18 keeps the headline card ink in every state; profit/loss is
+                // expressed by tinting the amount text (green/red) instead of
+                // recoloring the whole card.
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(18.dp))
-                        .background(
-                            when {
-                                profit -> DaftarColors.Green
-                                loss -> DaftarColors.Red
-                                else -> DaftarColors.Ink
-                            },
-                        )
+                        .background(DaftarColors.Ink)
                         .padding(18.dp),
                 ) {
                     MonoLabel("Net P&L · ${report.period.label}", color = Color.White.copy(alpha = 0.75f), fontSize = 9)
@@ -169,7 +178,14 @@ fun PnlScreen(
                         Text(
                             text = Formatters.signPrefix(grandRep).ifEmpty { "" } +
                                 Formatters.compact(abs(grandRep), repDec),
-                            style = TextStyle(fontFamily = Fraunces, fontWeight = FontWeight.Medium, fontSize = 34.sp, color = DaftarColors.Paper),
+                            style = TextStyle(
+                                fontFamily = Fraunces, fontWeight = FontWeight.Medium, fontSize = 34.sp,
+                                color = when {
+                                    profit -> DaftarColors.LongGreen
+                                    loss -> DaftarColors.ShortRed
+                                    else -> DaftarColors.Paper
+                                },
+                            ),
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
@@ -228,19 +244,12 @@ fun PnlScreen(
 
             if (report.items.isEmpty()) {
                 item {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 30.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Icon(Icons.Rounded.BarChart, null, tint = DaftarColors.Muted, modifier = Modifier.size(24.dp))
-                        Spacer(Modifier.height(10.dp))
-                        Text(
-                            "No P&L activity in this period",
-                            style = TextStyle(fontFamily = Inter, fontSize = 13.sp, color = DaftarColors.Muted),
-                        )
-                    }
+                    EmptyState(
+                        icon = Icons.Rounded.BarChart,
+                        title = "No profit or loss yet",
+                        sub = "Realized gains from currency trades and hawala commissions will be tracked here once you start trading.",
+                        tone = EmptyStateTone.MUTED,
+                    )
                 }
             } else {
                 items(count = report.items.size) { index ->
@@ -310,7 +319,7 @@ private fun PnlSourceCard(
             Text(meta, style = TextStyle(fontFamily = JetBrainsMono, fontSize = 10.sp, color = DaftarColors.Muted))
         }
         Text(
-            text = (if (forcePositivePrefix) "+" else Formatters.signPrefix(amountRep, 0.5)) +
+            text = (if (forcePositivePrefix) "+" else Formatters.signPrefix(amountRep)) +
                 Formatters.compact(abs(amountRep), repDec),
             style = TextStyle(
                 fontFamily = Fraunces, fontWeight = FontWeight.Medium, fontSize = 17.sp,
@@ -383,7 +392,7 @@ private fun PnlItemRow(item: PnlItem, state: PnlUiState) {
         }
         Column(horizontalAlignment = Alignment.End) {
             Text(
-                text = Formatters.signPrefix(amountRep, 0.5).ifEmpty { "" } +
+                text = Formatters.signPrefix(amountRep).ifEmpty { "" } +
                     Formatters.compact(abs(amountRep), state.reportingDecimals),
                 style = TextStyle(
                     fontFamily = Fraunces, fontWeight = FontWeight.Medium, fontSize = 15.sp,

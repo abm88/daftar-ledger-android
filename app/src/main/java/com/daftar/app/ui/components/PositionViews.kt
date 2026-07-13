@@ -73,9 +73,12 @@ fun DarkBalanceGrid(
     statusFor: (Double) -> String,
     modifier: Modifier = Modifier,
     accent: androidx.compose.ui.graphics.Color = DaftarColors.GoldSoft,
+    // v18 iterates customerActiveCurrencies(): the base three plus any extra
+    // currency with a balance — pass a wider list to show EUR/GOLD cells.
+    currencies: List<String> = AssetCatalog.LEDGER_CURRENCIES,
 ) {
     Row(modifier = modifier) {
-        AssetCatalog.LEDGER_CURRENCIES.forEach { cur ->
+        currencies.forEach { cur ->
             val amt = position[cur]
             Column(
                 modifier = Modifier
@@ -93,15 +96,16 @@ fun DarkBalanceGrid(
                         color = accent,
                     ),
                 )
+                // v18 signs and colors any non-zero amount (no ±0.5 dead zone).
                 Text(
-                    text = Formatters.signPrefix(amt, 0.5) + Formatters.number(abs(amt)),
+                    text = Formatters.signPrefix(amt) + Formatters.number(abs(amt)),
                     style = TextStyle(
                         fontFamily = Fraunces,
                         fontWeight = FontWeight.Medium,
                         fontSize = 17.sp,
                         color = when {
-                            amt > 0.5 -> DaftarColors.LongGreen
-                            amt < -0.5 -> DaftarColors.ShortRed
+                            amt > 0 -> DaftarColors.LongGreen
+                            amt < 0 -> DaftarColors.ShortRed
                             else -> DaftarColors.MutedLight
                         },
                     ),

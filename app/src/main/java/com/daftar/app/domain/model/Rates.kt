@@ -32,4 +32,16 @@ data class RateBook(
         if (code == "AFN") 1.0 else perAsset[code]?.sell ?: 0.0
 
     fun toAfn(code: String, amount: Double): Double = amount * sellRateToAfn(code)
+
+    /**
+     * AFN conversion with the prototype's defensive fallbacks (used by the ledger
+     * ribbon and statement totals): USD falls back to 72, PKR to 0.28, and any
+     * other unquoted currency passes through unchanged rather than dropping to 0.
+     */
+    fun toAfnOrFallback(code: String, amount: Double): Double = when (code) {
+        "AFN" -> amount
+        "USD" -> amount * (perAsset["USD"]?.sell?.takeIf { it > 0 } ?: 72.0)
+        "PKR" -> amount * (perAsset["PKR"]?.sell?.takeIf { it > 0 } ?: 0.28)
+        else -> perAsset[code]?.sell?.takeIf { it > 0 }?.let { amount * it } ?: amount
+    }
 }

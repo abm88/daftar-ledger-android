@@ -23,4 +23,8 @@ class InMemoryFxRepository @Inject constructor(seed: SeedData) : FxRepository {
     override suspend fun clearAll() {
         state.value = emptyList()
     }
+
+    override suspend fun replaceAll(trades: List<FxTrade>) {
+        state.value = trades
+    }
 }

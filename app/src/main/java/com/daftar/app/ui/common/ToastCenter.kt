@@ -14,6 +14,8 @@ import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.ChatBubble
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.PersonAdd
+import androidx.compose.material.icons.rounded.Remove
+import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Tag
 import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.automirrored.rounded.TrendingDown
@@ -32,13 +34,15 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 enum class ToastIcon {
-    CHECK, CROSS, SEND, MESSAGE, PHONE, PRINTER, COPY, DOWNLOAD, REFRESH,
+    CHECK, CROSS, MINUS, SHIELD, SEND, MESSAGE, PHONE, PRINTER, COPY, DOWNLOAD, REFRESH,
     SCALE, HASH, PERSON_ADD, ARROW_UP, ARROW_DOWN, TREND_UP, TREND_DOWN, LOGOUT;
 
     val vector: ImageVector
         get() = when (this) {
             CHECK -> Icons.Rounded.Check
             CROSS -> Icons.Rounded.Close
+            MINUS -> Icons.Rounded.Remove
+            SHIELD -> Icons.Rounded.Shield
             SEND -> Icons.AutoMirrored.Rounded.Send
             MESSAGE -> Icons.Rounded.ChatBubble
             PHONE -> Icons.Rounded.Phone

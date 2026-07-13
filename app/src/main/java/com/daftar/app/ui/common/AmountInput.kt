@@ -56,7 +56,8 @@ fun BigAmountInput(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(DaftarColors.PaperSoft)
+            // v18 tints the whole box red on error/insufficient states.
+            .background(if (error) DaftarColors.Red.copy(alpha = 0.06f) else DaftarColors.PaperSoft)
             .border(
                 1.5.dp,
                 if (error) DaftarColors.Red else DaftarColors.LineStrong,

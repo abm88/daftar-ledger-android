@@ -33,8 +33,13 @@ class InMemoryCashRepository @Inject constructor(seed: SeedData) : CashRepositor
     }
 
     override suspend fun clearAll() {
+        // v18 createBlankUserData labels an untouched drawer "Not yet counted".
         state.update { drawer ->
-            drawer.copy(balances = drawer.balances.mapValues { 0.0 }, lastCountLabel = "never")
+            drawer.copy(balances = drawer.balances.mapValues { 0.0 }, lastCountLabel = "Not yet counted")
         }
+    }
+
+    override suspend fun replaceAll(drawer: CashDrawer) {
+        state.value = drawer
     }
 }

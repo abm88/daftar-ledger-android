@@ -62,7 +62,7 @@ class PnlCalculator @Inject constructor(
             items += PnlItem(
                 timestampMillis = t.timestampMillis,
                 dateLabel = t.dateLabel,
-                label = "Sold ${Formatters.amount(t.fromAmount, t.fromCurrency)} ${t.fromCurrency} → ${t.toCurrency} @ ${t.rate}",
+                label = "Sold ${Formatters.amount(t.fromAmount, t.fromCurrency)} ${t.fromCurrency} → ${t.toCurrency} @ ${Formatters.ratePlain(t.rate)}",
                 amountAfn = realized,
                 source = PnlSource.FX_TRADE,
             )
@@ -76,6 +76,10 @@ class PnlCalculator @Inject constructor(
                 if (h.type == HawalaType.SETTLEMENT) return@h
                 if (h.status != HawalaStatus.PAID) return@h
                 if (h.timestampMillis < from || h.timestampMillis >= to) return@h
+                // Deliberate deviation from v18: the prototype computes commission
+                // from the percent field only, so fixed-mode commissions contribute 0
+                // to P&L. Dropping real income is a prototype gap, not a spec — we
+                // count the resolved amount for both modes.
                 val commissionInOriginal = h.resolvedCommissionAmount
                 if (commissionInOriginal <= 0.0) return@h
                 val commissionAfn = rates.toAfn(h.currency, commissionInOriginal)
@@ -93,7 +97,8 @@ class PnlCalculator @Inject constructor(
                         "${h.fromCity.code}→${h.toCity.code} · $rateLabel",
                     amountAfn = commissionAfn,
                     source = PnlSource.HAWALA_COMMISSION,
-                    partnerName = partner.shortName,
+                    // v18 falls back to the full name when shortName is blank.
+                    partnerName = partner.shortName.ifBlank { partner.name },
                 )
             }
         }

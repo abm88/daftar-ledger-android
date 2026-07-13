@@ -54,6 +54,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import com.daftar.app.core.format.Formatters
+import com.daftar.app.domain.model.AssetCatalog
 import com.daftar.app.domain.model.Customer
 import com.daftar.app.domain.model.CustomerTransaction
 import com.daftar.app.domain.repository.CustomerRepository
@@ -149,6 +150,7 @@ fun CustomerTxDetailScreen(
     val tx = state.tx ?: return
     val customer = state.customer ?: return
     val toaster = LocalToaster.current
+    val printContext = androidx.compose.ui.platform.LocalContext.current
     val clipboard = LocalClipboardManager.current
 
     val isDebit = tx.type.isDebit
@@ -179,7 +181,15 @@ fun CustomerTxDetailScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        IconSquareButton(Icons.AutoMirrored.Rounded.ArrowBack, { navController.popBackStack() }, onDark = true)
+                        // v18 back-from-tx always returns to the owning customer's page.
+                        IconSquareButton(
+                            Icons.AutoMirrored.Rounded.ArrowBack,
+                            {
+                                navController.popBackStack(DaftarDestinations.MAIN, inclusive = false)
+                                navController.navigate(DaftarDestinations.customerDetail(customer.id))
+                            },
+                            onDark = true,
+                        )
                         Row(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
@@ -233,7 +243,8 @@ fun CustomerTxDetailScreen(
                                 ),
                             )
                             Text(
-                                text = " ${tx.currency}",
+                                // v18 shows "USD $" — code plus symbol.
+                                text = " ${tx.currency} ${AssetCatalog.symbolFor(tx.currency)}",
                                 style = TextStyle(
                                     fontFamily = JetBrainsMono,
                                     fontWeight = FontWeight.SemiBold,
@@ -251,9 +262,10 @@ fun CustomerTxDetailScreen(
                 DetailSectionTitle("Account holder")
                 DetailCard {
                     DetailRow(
-                        label = customer.city.displayName,
+                        label = "Account holder",
                         value = customer.name,
-                        sub = customer.phone,
+                        // v18 folds city and phone into one sub-line.
+                        sub = "${customer.city.displayName} · ${customer.phone}",
                         leading = { CustomerBadge(customer, 36.dp) },
                         trailing = {
                             Icon(
@@ -340,7 +352,7 @@ fun CustomerTxDetailScreen(
                         DetailRow(
                             label = "Conversion rate",
                             value = "${conv.rate} ${conv.receivedCurrency} → ${conv.creditedCurrency}",
-                            aside = "MANUAL",
+                            aside = "manual", // v18 keeps this lowercase
                             icon = Icons.Rounded.Tag,
                             iconTint = DaftarColors.CopperDeep,
                             iconBackground = DaftarColors.Gold.copy(alpha = 0.2f),
@@ -397,7 +409,36 @@ fun CustomerTxDetailScreen(
                         toaster("Receipt sent via WhatsApp", ToastIcon.MESSAGE)
                     }
                     ShareAction(Icons.Rounded.Print, "Print", Modifier.weight(1f)) {
+                        // v18 tx-print-receipt: toast, then a real print dialog.
                         toaster("Print dialog opened", ToastIcon.PRINTER)
+                        com.daftar.app.core.print.StatementPrinter.print(
+                            printContext,
+                            com.daftar.app.core.print.StatementPrintSpec(
+                                jobName = "receipt-${tx.id}",
+                                docTitle = "Receipt",
+                                pashtoTitle = "رسید",
+                                metaLeftLabel = "Account holder",
+                                metaLeftValue = customer.name,
+                                metaLeftSub = "${customer.city.displayName} · ${customer.phone}",
+                                metaRightLabel = "Date",
+                                metaRightValue = tx.dateLabel,
+                                metaRightSub = tx.type.label,
+                                summary = emptyList(),
+                                columns = listOf("Type", "Description", "Cur", "Amount", "New balance"),
+                                rows = listOf(
+                                    listOf(
+                                        tx.type.label,
+                                        tx.note ?: "—",
+                                        tx.currency,
+                                        (if (tx.type.isDebit) "−" else "+") + Formatters.number(tx.amount),
+                                        Formatters.signPrefix(state.balanceAfter).ifEmpty { "+" } +
+                                            Formatters.number(kotlin.math.abs(state.balanceAfter)),
+                                    ),
+                                ),
+                                profile = com.daftar.app.domain.model.ShopProfile(),
+                                issuedLabel = tx.dateLabel,
+                            ),
+                        )
                     }
                     ShareAction(Icons.Rounded.ContentCopy, "Copy", Modifier.weight(1f)) {
                         viewModel.buildReceiptText(state)?.let { receipt ->
@@ -445,7 +486,9 @@ fun CustomerTxDetailScreen(
                     .background(DaftarColors.Red)
                     .clickable {
                         viewModel.delete {
-                            navController.popBackStack()
+                            // v18 routes to the customer's page after deleting.
+                            navController.popBackStack(DaftarDestinations.MAIN, inclusive = false)
+                            navController.navigate(DaftarDestinations.customerDetail(customer.id))
                         }
                     }
                     .padding(vertical = 14.dp),

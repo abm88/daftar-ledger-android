@@ -44,6 +44,7 @@ import com.daftar.app.domain.repository.RatesRepository
 import com.daftar.app.domain.repository.SettingsRepository
 import com.daftar.app.domain.usecase.ActivityFeedBuilder
 import com.daftar.app.ui.common.DaftarFilterChip
+import com.daftar.app.ui.common.IconSquareButton
 import com.daftar.app.ui.common.MonoLabel
 import com.daftar.app.ui.feature.ledger.LedgerFilter
 import com.daftar.app.ui.theme.DaftarColors
@@ -115,7 +116,7 @@ class BusinessStatementViewModel @Inject constructor(
         var inflow = 0.0
         var outflow = 0.0
         entries.forEach { entry ->
-            val afn = rates.toAfn(entry.currency, entry.amount)
+            val afn = rates.toAfnOrFallback(entry.currency, entry.amount)
             when {
                 entry.direction > 0 -> inflow += afn
                 entry.direction < 0 -> outflow += afn
@@ -153,11 +154,62 @@ fun BusinessStatementScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
+    // v18 ledger-statement print doc ("business-statement-{period}").
+    val printSpec = {
+        com.daftar.app.core.print.StatementPrintSpec(
+            jobName = "business-statement-" + state.period.label.lowercase().replace(Regex("[^a-z0-9]+"), "-"),
+            docTitle = "Business Statement",
+            pashtoTitle = "د سوداګرۍ راپور",
+            metaLeftLabel = "Period",
+            metaLeftValue = state.period.label,
+            metaLeftSub = "${state.fromLabel} → ${state.toLabel}",
+            metaRightLabel = "Issued",
+            metaRightValue = state.issuedLabel,
+            metaRightSub = "${state.entries.size} entries",
+            summary = listOf(
+                com.daftar.app.core.print.PrintSummaryCell(
+                    "IN", "+" + Formatters.number(state.inflowAfn), "AFN-EQ",
+                ),
+                com.daftar.app.core.print.PrintSummaryCell(
+                    "OUT", "−" + Formatters.number(state.outflowAfn), "AFN-EQ",
+                ),
+                com.daftar.app.core.print.PrintSummaryCell(
+                    "NET",
+                    Formatters.signPrefix(state.netAfn).ifEmpty { "" } + Formatters.number(abs(state.netAfn)),
+                    "AFN-EQ",
+                ),
+            ),
+            columns = listOf("Date", "Type", "Description", "Cur", "Debit", "Credit"),
+            rows = state.entries.map { entry ->
+                val (title, subtitle) = describeEntry(entry)
+                val amountText = Formatters.number(entry.amount)
+                listOf(
+                    Formatters.fullDateLabel(entry.timestampMillis),
+                    title,
+                    subtitle,
+                    entry.currency,
+                    if (entry.direction < 0) amountText else "—",
+                    if (entry.direction > 0) amountText else "—",
+                )
+            },
+            profile = state.profile,
+            issuedLabel = state.issuedLabel,
+        )
+    }
+    val printContext = androidx.compose.ui.platform.LocalContext.current
+
     Column(modifier = Modifier.fillMaxWidth()) {
         StatementHeaderBar(
             title = "Business Statement",
             subtitle = "${state.period.label} · ${state.entries.size} entries",
             onBack = { navController.popBackStack() },
+            trailing = {
+                IconSquareButton(
+                    androidx.compose.material.icons.Icons.Rounded.Download,
+                    { com.daftar.app.core.print.StatementPrinter.print(printContext, printSpec()) },
+                    onDark = true,
+                )
+            },
         )
 
         // Period & type controls
@@ -225,9 +277,13 @@ fun BusinessStatementScreen(
                     StatementSummaryCell("OUT", "−" + Formatters.number(state.outflowAfn), "AFN · PAID", DaftarColors.Red),
                     StatementSummaryCell(
                         "NET",
-                        (if (state.netAfn >= 0) "+" else "−") + Formatters.number(abs(state.netAfn)),
+                        Formatters.signPrefix(state.netAfn).ifEmpty { "" } + Formatters.number(abs(state.netAfn)),
                         "AFN · NET",
-                        if (state.netAfn >= 0) DaftarColors.Green else DaftarColors.Red,
+                        when {
+                            state.netAfn > 0 -> DaftarColors.Green
+                            state.netAfn < 0 -> DaftarColors.Red
+                            else -> DaftarColors.Muted
+                        },
                     ),
                 ),
             )
@@ -242,7 +298,7 @@ fun BusinessStatementScreen(
             StatementFooter(state.issuedLabel.uppercase())
         }
 
-        StatementActions(modifier = Modifier.navigationBarsPadding())
+        StatementActions(modifier = Modifier.navigationBarsPadding(), printSpec = printSpec)
     }
 }
 
@@ -254,6 +310,13 @@ private fun BusinessStatementLine(entry: LedgerEntry) {
         LedgerEntryKind.CUSTOMER_TX -> "CUSTOMER"
         LedgerEntryKind.FX -> "FX TRADE"
         LedgerEntryKind.SETTLEMENT -> "SETTLEMENT"
+    }
+    // v18 tints the tag with the entry's icon color rather than fixed copper.
+    val kindColor = when (entry.kind) {
+        LedgerEntryKind.HAWALA -> DaftarColors.Blue
+        LedgerEntryKind.CUSTOMER_TX -> if (entry.direction > 0) DaftarColors.Green else DaftarColors.Red
+        LedgerEntryKind.FX -> DaftarColors.CopperDeep
+        LedgerEntryKind.SETTLEMENT -> DaftarColors.CopperDeep
     }
     Column(
         modifier = Modifier
@@ -280,7 +343,7 @@ private fun BusinessStatementLine(entry: LedgerEntry) {
                         kindLabel,
                         style = TextStyle(
                             fontFamily = JetBrainsMono, fontWeight = FontWeight.Bold, fontSize = 7.sp,
-                            letterSpacing = 0.08.em, color = DaftarColors.CopperDeep,
+                            letterSpacing = 0.08.em, color = kindColor,
                         ),
                     )
                     Text(
@@ -297,18 +360,19 @@ private fun BusinessStatementLine(entry: LedgerEntry) {
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            // v18's statement table leaves the debit/credit cells blank ("—")
+            // for neutral rows (hawalas, FX) and prints amounts with 0 decimals.
             Text(
-                text = when {
-                    entry.direction > 0 -> "+"
-                    entry.direction < 0 -> "−"
-                    else -> ""
-                } + Formatters.amount(entry.amount, entry.currency) + " " + entry.currency,
+                text = if (entry.direction == 0) "—" else {
+                    (if (entry.direction > 0) "+" else "−") +
+                        Formatters.number(entry.amount) + " " + entry.currency
+                },
                 style = TextStyle(
                     fontFamily = JetBrainsMono, fontWeight = FontWeight.Bold, fontSize = 10.sp,
                     color = when {
                         entry.direction > 0 -> DaftarColors.Green
                         entry.direction < 0 -> DaftarColors.Red
-                        else -> DaftarColors.Ink
+                        else -> DaftarColors.Muted
                     },
                 ),
             )
@@ -318,20 +382,33 @@ private fun BusinessStatementLine(entry: LedgerEntry) {
     }
 }
 
+// v18 reuses the activity-feed titles/subtitles: "You Received · name",
+// the account-funded "Hawala debit" special case, the "· pending" marker,
+// and the FX realized-P&L suffix.
 private fun describeEntry(entry: LedgerEntry): Pair<String, String> = when (entry) {
     is LedgerEntry.HawalaEntry -> {
         val h = entry.hawala
         val direction = if (h.type == com.daftar.app.domain.model.HawalaType.SEND) "Sent hawala" else "Received hawala"
-        "$direction · ${entry.partner.shortName}" to
-            "${h.fromCity.code} → ${h.toCity.code} · ${h.senderName} → ${h.receiverName}"
+        "$direction · ${entry.partner.shortName}" to buildString {
+            append("${h.fromCity.code} → ${h.toCity.code} · ${h.senderName} → ${h.receiverName}")
+            if (h.status == com.daftar.app.domain.model.HawalaStatus.PENDING) append(" · pending")
+        }
     }
     is LedgerEntry.SettlementEntry ->
         "Settlement · ${entry.partner.shortName}" to (entry.hawala.note ?: "Position offset")
-    is LedgerEntry.CustomerTxEntry ->
-        "${entry.tx.type.label} · ${entry.customer.name}" to (entry.tx.note ?: "Customer account")
+    is LedgerEntry.CustomerTxEntry -> {
+        val title = if (entry.isHawalaLinked) "Hawala debit" else entry.tx.type.feedLabel
+        "$title · ${entry.customer.name}" to
+            (entry.tx.note ?: "Customer account · ${entry.customer.city.displayName}")
+    }
     is LedgerEntry.FxEntry -> {
         val t = entry.trade
+        val realized = t.realizedPnlAfn
+        val plSuffix = if (realized != null && kotlin.math.abs(realized) >= 0.5) {
+            " · " + (if (realized >= 0) "+" else "−") + Formatters.number(realized) +
+                " AFN " + (if (realized >= 0) "profit" else "loss")
+        } else ""
         "${if (t.side == com.daftar.app.domain.model.FxSide.SELL) "Sold" else "Bought"} ${t.fromCurrency} → ${t.toCurrency}" to
-            "${Formatters.amount(t.fromAmount, t.fromCurrency)} ${t.fromCurrency} @ ${t.rate}"
+            "${Formatters.amount(t.fromAmount, t.fromCurrency)} ${t.fromCurrency} @ ${Formatters.ratePlain(t.rate)}$plSuffix"
     }
 }

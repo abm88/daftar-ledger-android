@@ -34,6 +34,7 @@ import com.daftar.app.ui.common.ToastIcon
 import com.daftar.app.ui.components.SplashOverlay
 import com.daftar.app.ui.components.ToastPill
 import com.daftar.app.ui.feature.assets.AssetManagementScreen
+import com.daftar.app.ui.feature.branches.BranchesScreen
 import com.daftar.app.ui.feature.cashcount.CashCountScreen
 import com.daftar.app.ui.feature.customertx.CustomerTxDetailScreen
 import com.daftar.app.ui.feature.defaults.DefaultsScreen
@@ -77,7 +78,8 @@ fun DaftarApp(appViewModel: AppViewModel = hiltViewModel()) {
     var splashVisible by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
-        delay(1800)
+        // v18 keeps the splash for 2 seconds before it fades out.
+        delay(2000)
         splashVisible = false
     }
 
@@ -146,6 +148,10 @@ fun DaftarApp(appViewModel: AppViewModel = hiltViewModel()) {
                                 nullable = true
                                 defaultValue = null
                             },
+                            navArgument("locked") {
+                                type = NavType.StringType
+                                defaultValue = "false"
+                            },
                         ),
                     ) { NewCustomerTxScreen(navController) }
 
@@ -178,6 +184,7 @@ fun DaftarApp(appViewModel: AppViewModel = hiltViewModel()) {
                     ) { BusinessStatementScreen(navController) }
 
                     composable(DaftarDestinations.RATES) { RatesScreen(navController) }
+                    composable(DaftarDestinations.BRANCHES) { BranchesScreen(navController) }
                     composable(DaftarDestinations.ASSET_MANAGEMENT) { AssetManagementScreen(navController) }
                     composable(DaftarDestinations.CASH_COUNT) { CashCountScreen(navController) }
                     composable(DaftarDestinations.PNL) { PnlScreen(navController) }

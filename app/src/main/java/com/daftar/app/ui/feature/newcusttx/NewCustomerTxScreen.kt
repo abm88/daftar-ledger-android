@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -56,6 +57,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import com.daftar.app.core.format.Formatters
+import androidx.compose.material.icons.rounded.PersonAdd
+import com.daftar.app.domain.model.AssetCatalog
 import com.daftar.app.domain.model.Customer
 import com.daftar.app.domain.model.CustomerTxType
 import com.daftar.app.domain.repository.CustomerRepository
@@ -66,7 +69,7 @@ import com.daftar.app.domain.usecase.CustomerTxDraft
 import com.daftar.app.domain.usecase.RecordCustomerTransactionUseCase
 import com.daftar.app.domain.usecase.RecordCustomerTxResult
 import com.daftar.app.ui.common.BigAmountInput
-import com.daftar.app.ui.common.CurrencySwitcher
+import com.daftar.app.ui.common.dashedBorder
 import com.daftar.app.ui.common.FieldBox
 import com.daftar.app.ui.common.FieldTextInput
 import com.daftar.app.ui.common.IconSquareButton
@@ -77,6 +80,9 @@ import com.daftar.app.ui.common.ToastCenter
 import com.daftar.app.ui.common.ToastIcon
 import com.daftar.app.ui.common.sanitizeAmountInput
 import com.daftar.app.ui.common.CustomerBadge
+import com.daftar.app.ui.components.EmptyState
+import com.daftar.app.ui.components.EmptyStateTone
+import com.daftar.app.ui.feature.accounts.AddCustomerSheet
 import com.daftar.app.ui.theme.DaftarColors
 import com.daftar.app.ui.theme.Fraunces
 import com.daftar.app.ui.theme.Inter
@@ -96,6 +102,8 @@ enum class CustTxMode { FULL, GAVE, RECEIVED }
 data class NewCustTxFormState(
     val mode: CustTxMode = CustTxMode.FULL,
     val customerId: String? = null,
+    /** v18 lockedCustomer: opened from the customer's own page — picker hidden. */
+    val locked: Boolean = false,
     val type: CustomerTxType = CustomerTxType.DEPOSIT,
     val currency: String = "USD",
     val amountText: String = "",
@@ -104,6 +112,9 @@ data class NewCustTxFormState(
     val convertTo: String = "AFN",
     val rateText: String = "",
     val pickerOpen: Boolean = false,
+    val addCustomerOpen: Boolean = false,
+    /** Red error styling on the amount after a failed save attempt (v18 shake). */
+    val amountError: Boolean = false,
 )
 
 data class NewCustTxUiState(
@@ -111,6 +122,8 @@ data class NewCustTxUiState(
     val customer: Customer? = null,
     val customers: List<Customer> = emptyList(),
     val suggestedRate: Double? = null,
+    /** Enabled currency codes (v18 activeCurrencies — metals excluded by design). */
+    val activeCurrencies: List<String> = listOf("USD", "AFN", "PKR"),
 ) {
     val amount: Double get() = form.amountText.toDoubleOrNull() ?: 0.0
     val rate: Double get() = form.rateText.toDoubleOrNull() ?: 0.0
@@ -124,6 +137,7 @@ class NewCustomerTxViewModel @Inject constructor(
     settingsRepository: SettingsRepository,
     private val converter: CurrencyConverter,
     private val recordTransaction: RecordCustomerTransactionUseCase,
+    private val addCustomerUseCase: com.daftar.app.domain.usecase.AddCustomerUseCase,
     private val toastCenter: ToastCenter,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
@@ -142,6 +156,7 @@ class NewCustomerTxViewModel @Inject constructor(
                 mode = mode,
                 customerId = savedStateHandle.get<String>("customerId")
                     ?: customerRepository.customers.value.firstOrNull()?.id,
+                locked = savedStateHandle.get<String>("locked") == "true",
                 type = if (mode == CustTxMode.GAVE) CustomerTxType.WITHDRAWAL else CustomerTxType.DEPOSIT,
                 currency = tradeCurrency,
                 convertTo = if (tradeCurrency == "AFN") "USD" else "AFN",
@@ -153,7 +168,11 @@ class NewCustomerTxViewModel @Inject constructor(
         form,
         customerRepository.customers,
         ratesRepository.rateBook,
-    ) { form, customers, rates ->
+        settingsRepository.settings,
+    ) { form, customers, rates, settings ->
+        // v18: every enabled currency gets a pill (metals excluded); the selected
+        // one stays listed even if it was deactivated mid-edit.
+        val active = settings.activeCurrencies().map { it.code }
         NewCustTxUiState(
             form = form,
             customer = customers.firstOrNull { it.id == form.customerId },
@@ -161,6 +180,7 @@ class NewCustomerTxViewModel @Inject constructor(
             suggestedRate = if (form.convert) {
                 converter.suggestedConversionRate(form.currency, form.convertTo, rates)
             } else null,
+            activeCurrencies = if (form.currency in active) active else active + form.currency,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NewCustTxUiState())
 
@@ -171,11 +191,31 @@ class NewCustomerTxViewModel @Inject constructor(
     fun setCurrency(currency: String) {
         form.value = form.value.copy(
             currency = currency,
-            // Keep the conversion destination distinct from the source.
-            convertTo = if (form.value.convertTo == currency) {
+            // v18 re-aims the destination only while the convert toggle is on.
+            convertTo = if (form.value.convert && form.value.convertTo == currency) {
                 if (currency == "USD") "AFN" else "USD"
             } else form.value.convertTo,
         )
+    }
+
+    /** v18 add-customer-from-picker: the new account is auto-selected. */
+    fun addCustomerAndSelect(
+        name: String, shortName: String, initial: String, phone: String,
+        city: com.daftar.app.domain.model.City, notes: String, openings: Map<String, Double>,
+    ) {
+        viewModelScope.launch {
+            val customer = addCustomerUseCase(
+                com.daftar.app.domain.usecase.NewCustomerDraft(name, shortName, initial, phone, city, notes, openings),
+            )
+            if (customer != null) {
+                toastCenter.show("Account opened · ${customer.name}", ToastIcon.PERSON_ADD)
+                form.value = form.value.copy(
+                    customerId = customer.id,
+                    addCustomerOpen = false,
+                    pickerOpen = false,
+                )
+            }
+        }
     }
 
     fun toggleConvert() {
@@ -193,6 +233,8 @@ class NewCustomerTxViewModel @Inject constructor(
         val state = uiState.value
         val form = state.form
         if (state.amount <= 0 || form.customerId == null) {
+            // v18 also shakes the amount box; we flag it red until the next edit.
+            this.form.value = form.copy(amountError = state.amount <= 0)
             toastCenter.show("Choose account, enter amount", ToastIcon.CROSS)
             return
         }
@@ -214,7 +256,8 @@ class NewCustomerTxViewModel @Inject constructor(
                 ),
             )
             if (result is RecordCustomerTxResult.Recorded) {
-                val label = result.tx.type.label.substringBefore(" ")
+                // v18 toast uses the plain accounting word ("Deposit", "Credit"…).
+                val label = result.tx.type.plainLabel
                 val message = if (form.convert) {
                     "$label · ${Formatters.amount(result.tx.amount, result.tx.currency)} ${result.tx.currency} " +
                         "(from ${Formatters.amount(state.amount, form.currency)} ${form.currency})"
@@ -281,14 +324,40 @@ fun NewCustomerTxScreen(
                             fontSize = 18.sp, color = DaftarColors.Paper,
                         ),
                     )
-                    Text(
-                        text = headerPashto as String,
-                        style = TextStyle(
-                            fontFamily = NotoNaskhArabic, fontSize = 12.sp,
-                            color = DaftarColors.Paper.copy(alpha = 0.85f),
-                            textDirection = TextDirection.Rtl,
-                        ),
-                    )
+                    if (form.locked && state.customer != null) {
+                        // v18 locked mode shows who the entry is pinned to.
+                        Row(
+                            modifier = Modifier
+                                .padding(top = 2.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color.White.copy(alpha = 0.16f))
+                                .padding(horizontal = 8.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        ) {
+                            Icon(
+                                Icons.Rounded.Person, null,
+                                tint = DaftarColors.Paper,
+                                modifier = Modifier.size(10.dp),
+                            )
+                            Text(
+                                text = state.customer!!.name,
+                                style = TextStyle(
+                                    fontFamily = JetBrainsMono, fontWeight = FontWeight.SemiBold,
+                                    fontSize = 10.sp, color = DaftarColors.Paper,
+                                ),
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = headerPashto as String,
+                            style = TextStyle(
+                                fontFamily = NotoNaskhArabic, fontSize = 12.sp,
+                                color = DaftarColors.Paper.copy(alpha = 0.85f),
+                                textDirection = TextDirection.Rtl,
+                            ),
+                        )
+                    }
                 }
             }
             IconSquareButton(Icons.Rounded.Close, { navController.popBackStack() }, onDark = true)
@@ -300,7 +369,8 @@ fun NewCustomerTxScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 18.dp),
         ) {
-            // Account picker
+            // Account picker — hidden entirely when locked to one customer (v18).
+            if (!form.locked) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -329,6 +399,7 @@ fun NewCustomerTxScreen(
                     )
                 }
                 Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = DaftarColors.Muted, modifier = Modifier.size(16.dp))
+            }
             }
 
             // Type grid — full mode only
@@ -382,7 +453,12 @@ fun NewCustomerTxScreen(
                                 }
                                 Column {
                                     Text(
-                                        text = type.label.substringBefore(" "),
+                                        // v18 tile titles: "You Received" / "You Gave" / "Charge" / "Advance".
+                                        text = when (type) {
+                                            CustomerTxType.CHARGE -> "Charge"
+                                            CustomerTxType.CREDIT -> "Advance"
+                                            else -> type.label
+                                        },
                                         style = TextStyle(
                                             fontFamily = Inter, fontWeight = FontWeight.SemiBold,
                                             fontSize = 12.sp, color = DaftarColors.Ink,
@@ -402,15 +478,66 @@ fun NewCustomerTxScreen(
             }
 
             Spacer(Modifier.height(6.dp))
-            CurrencySwitcher(form.currency, viewModel::setCurrency)
+            // v18 renders a scrollable pill per enabled currency (symbol + code)
+            // instead of the fixed three-segment switcher.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                state.activeCurrencies.forEach { code ->
+                    val on = form.currency == code
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(if (on) DaftarColors.Ink else DaftarColors.PaperSoft)
+                            .border(
+                                1.dp,
+                                if (on) DaftarColors.Ink else DaftarColors.LineStrong,
+                                RoundedCornerShape(20.dp),
+                            )
+                            .clickable { viewModel.setCurrency(code) }
+                            .padding(horizontal = 12.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        Text(
+                            text = AssetCatalog.symbolFor(code),
+                            style = TextStyle(
+                                fontFamily = Inter, fontSize = 11.sp,
+                                color = if (on) DaftarColors.GoldSoft else DaftarColors.Muted,
+                            ),
+                        )
+                        Text(
+                            text = code,
+                            style = TextStyle(
+                                fontFamily = JetBrainsMono, fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp, letterSpacing = 0.05.em,
+                                color = if (on) DaftarColors.Paper else DaftarColors.InkSoft,
+                            ),
+                        )
+                    }
+                }
+            }
 
             Spacer(Modifier.height(14.dp))
             BigAmountInput(
                 value = form.amountText,
-                onValueChange = { text -> viewModel.update { it.copy(amountText = text) } },
+                onValueChange = { text -> viewModel.update { it.copy(amountText = text, amountError = false) } },
                 currency = form.currency,
                 label = if (form.convert) "Cash received · type amount" else "Amount · type amount",
+                error = form.amountError,
             )
+
+            // v18 field order: note sits between the amount and the convert toggle.
+            Spacer(Modifier.height(12.dp))
+            FieldBox("Note · description", modifier = Modifier.fillMaxWidth()) {
+                FieldTextInput(
+                    form.note, { text -> viewModel.update { it.copy(note = text) } },
+                    "e.g. Cash deposit, Market expenses, Paid supplier",
+                )
+            }
 
             Spacer(Modifier.height(12.dp))
             // Convert toggle
@@ -478,13 +605,6 @@ fun NewCustomerTxScreen(
                 ConversionBlock(state, viewModel)
             }
 
-            Spacer(Modifier.height(12.dp))
-            FieldBox("Note · description", modifier = Modifier.fillMaxWidth()) {
-                FieldTextInput(
-                    form.note, { text -> viewModel.update { it.copy(note = text) } },
-                    "e.g. Cash deposit, Market expenses, Paid supplier",
-                )
-            }
             Spacer(Modifier.height(20.dp))
         }
 
@@ -520,6 +640,18 @@ fun NewCustomerTxScreen(
                     style = TextStyle(fontFamily = Fraunces, fontWeight = FontWeight.Medium, fontSize = 18.sp, color = DaftarColors.Ink),
                 )
                 Spacer(Modifier.height(12.dp))
+                if (state.customers.isEmpty()) {
+                    // v18: empty picker offers to create the first account inline.
+                    EmptyState(
+                        icon = Icons.Rounded.Person,
+                        title = "No accounts yet",
+                        sub = "You haven't added any customer accounts. Create one to record this entry against it.",
+                        tone = EmptyStateTone.COPPER,
+                        ctaLabel = "Create account · نوی حساب",
+                        ctaIcon = Icons.Rounded.PersonAdd,
+                        onCta = { viewModel.update { it.copy(addCustomerOpen = true) } },
+                    )
+                }
                 state.customers.forEach { customer ->
                     Row(
                         modifier = Modifier
@@ -548,8 +680,41 @@ fun NewCustomerTxScreen(
                         }
                     }
                 }
+                if (state.customers.isNotEmpty()) {
+                    // v18 footer row: create an account without leaving the flow.
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 10.dp)
+                            .dashedBorder(DaftarColors.LineDashed, 1.5.dp, 12.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { viewModel.update { it.copy(addCustomerOpen = true) } }
+                            .padding(vertical = 12.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Rounded.PersonAdd, null, tint = DaftarColors.InkSoft, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "Add new account · نوی حساب",
+                            style = TextStyle(
+                                fontFamily = Inter, fontWeight = FontWeight.SemiBold,
+                                fontSize = 13.sp, color = DaftarColors.InkSoft,
+                            ),
+                        )
+                    }
+                }
             }
         }
+    }
+
+    if (form.addCustomerOpen) {
+        AddCustomerSheet(
+            onDismiss = { viewModel.update { it.copy(addCustomerOpen = false) } },
+            onSave = { name, shortName, initial, phone, city, notes, openings ->
+                viewModel.addCustomerAndSelect(name, shortName, initial, phone, city, notes, openings)
+            },
+        )
     }
 }
 
@@ -611,9 +776,11 @@ private fun ConversionBlock(state: NewCustTxUiState, viewModel: NewCustomerTxVie
             }
         }
 
-        // Suggested market rate
+        // Suggested market rate — v18 formats 2 dp except PKR→AFN which needs 4.
         val suggested = state.suggestedRate
         if (suggested != null && kotlin.math.abs(state.rate - suggested) > 0.0001) {
+            val rateDecimals = if (form.currency == "PKR" && form.convertTo == "AFN") 4 else 2
+            val suggestedText = Formatters.rate(suggested, rateDecimals)
             Spacer(Modifier.height(8.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -621,7 +788,7 @@ private fun ConversionBlock(state: NewCustTxUiState, viewModel: NewCustomerTxVie
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "Today's rate: 1 ${form.currency} = ${Formatters.rate(suggested, 4).trimEnd('0').trimEnd('.')} ${form.convertTo}",
+                    text = "Today's rate: 1 ${form.currency} = $suggestedText ${form.convertTo}",
                     style = TextStyle(fontFamily = JetBrainsMono, fontSize = 10.sp, color = DaftarColors.MutedLight),
                 )
                 Box(
@@ -629,12 +796,12 @@ private fun ConversionBlock(state: NewCustTxUiState, viewModel: NewCustomerTxVie
                         .clip(RoundedCornerShape(6.dp))
                         .background(DaftarColors.Gold.copy(alpha = 0.25f))
                         .clickable {
-                            viewModel.update { it.copy(rateText = Formatters.rate(suggested, 4).trimEnd('0').trimEnd('.')) }
+                            viewModel.update { it.copy(rateText = suggestedText) }
                         }
                         .padding(horizontal = 10.dp, vertical = 4.dp),
                 ) {
                     Text(
-                        "USE",
+                        "Use",
                         style = TextStyle(
                             fontFamily = JetBrainsMono, fontWeight = FontWeight.Bold,
                             fontSize = 9.sp, letterSpacing = 0.1.em, color = DaftarColors.GoldSoft,
@@ -665,7 +832,8 @@ private fun ConversionBlock(state: NewCustTxUiState, viewModel: NewCustomerTxVie
                     color = DaftarColors.LongGreen, fontSize = 9,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    listOf("USD", "AFN", "PKR").filter { it != form.currency }.forEach { cur ->
+                    // v18 offers every enabled currency except the source.
+                    state.activeCurrencies.filter { it != form.currency }.forEach { cur ->
                         val on = form.convertTo == cur
                         Box(
                             modifier = Modifier

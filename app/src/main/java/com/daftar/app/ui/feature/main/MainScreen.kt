@@ -25,6 +25,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -43,6 +44,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
+import androidx.navigation.compose.currentBackStackEntryAsState
 import com.daftar.app.domain.model.HawalaStatus
 import com.daftar.app.domain.model.HawalaType
 import com.daftar.app.domain.repository.PartnerRepository
@@ -60,12 +62,16 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
+/** savedStateHandle key a popping screen sets to pick the landing tab. */
+const val OPEN_TAB_KEY = "openTab"
+const val OPEN_TAB_HAWALAS = "hawalas"
+
 enum class MainTab(val label: String, val icon: ImageVector) {
     HOME("Home", Icons.Rounded.Home),
     ACCOUNTS("Accounts", Icons.Rounded.BusinessCenter),
     HAWALAS("Hawalas", Icons.AutoMirrored.Rounded.Send),
     LEDGER("Ledger", Icons.AutoMirrored.Rounded.MenuBook),
-    SHOP("Shop", Icons.Rounded.Person),
+    SHOP("Daftar", Icons.Rounded.Person),
 }
 
 @HiltViewModel
@@ -91,6 +97,21 @@ fun MainScreen(
     var chooserOpen by rememberSaveable { mutableStateOf(false) }
     val pendingCount by viewModel.pendingCount.collectAsStateWithLifecycle()
 
+    // Screens deeper in the stack can request a tab to land on when they pop
+    // back here — v18's back-from-hawala always returns to the Hawalas tab.
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    LaunchedEffect(backStackEntry) {
+        val entry = backStackEntry ?: return@LaunchedEffect
+        if (entry.destination.route == DaftarDestinations.MAIN) {
+            when (entry.savedStateHandle.remove<String>(OPEN_TAB_KEY)) {
+                OPEN_TAB_HAWALAS -> currentTab = MainTab.HAWALAS
+            }
+        }
+    }
+
+    // Same instance the Accounts tab uses (both scoped to this destination).
+    val accountsViewModel: com.daftar.app.ui.feature.accounts.AccountsViewModel = hiltViewModel()
+
     Scaffold(
         containerColor = DaftarColors.Paper,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -109,7 +130,10 @@ fun MainScreen(
                         Column(
                             modifier = Modifier
                                 .clip(CircleShape)
-                                .clickable { currentTab = tab }
+                                .clickable {
+                                    if (currentTab != tab) accountsViewModel.resetSearch()
+                                    currentTab = tab
+                                }
                                 .padding(horizontal = 10.dp, vertical = 4.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(3.dp),
@@ -169,7 +193,7 @@ fun MainScreen(
                     onOpenNewEntry = { chooserOpen = true },
                     onViewAllLedger = { currentTab = MainTab.LEDGER },
                 )
-                MainTab.ACCOUNTS -> AccountsScreen(navController)
+                MainTab.ACCOUNTS -> AccountsScreen(navController, accountsViewModel)
                 MainTab.HAWALAS -> HawalasScreen(navController)
                 MainTab.LEDGER -> GeneralLedgerScreen(
                     navController = navController,

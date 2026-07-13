@@ -16,12 +16,9 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.BusinessCenter
-import androidx.compose.material.icons.rounded.Group
 import androidx.compose.material.icons.rounded.PersonAdd
-import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -29,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -48,14 +46,12 @@ import androidx.navigation.NavController
 import com.daftar.app.core.format.Formatters
 import com.daftar.app.domain.model.AssetCatalog
 import com.daftar.app.ui.common.DaftarSearchField
-import com.daftar.app.ui.common.IconSquareButton
 import com.daftar.app.ui.common.MonoLabel
-import com.daftar.app.ui.common.SegmentButton
-import com.daftar.app.ui.common.SegmentedSwitcher
-import com.daftar.app.ui.common.dashedBorder
+import com.daftar.app.ui.common.SyncIconButton
 import com.daftar.app.ui.common.CustomerBadge
 import com.daftar.app.ui.components.DarkBalanceGrid
-import com.daftar.app.ui.common.PartnerBadge
+import com.daftar.app.ui.components.EmptyState
+import com.daftar.app.ui.components.EmptyStateTone
 import com.daftar.app.ui.components.PositionLines
 import com.daftar.app.ui.navigation.DaftarDestinations
 import com.daftar.app.ui.theme.DaftarColors
@@ -64,14 +60,16 @@ import com.daftar.app.ui.theme.Inter
 import com.daftar.app.ui.theme.JetBrainsMono
 import com.daftar.app.ui.theme.NotoNaskhArabic
 
-/** Accounts tab: customer accounts and partner sarafs behind a sub-tab switcher. */
+/**
+ * Accounts tab — customers only (v18: "Accounts screen is now customers-only.
+ * Partners moved to Daftar -> Branches", see ui/feature/branches).
+ */
 @Composable
 fun AccountsScreen(
     navController: NavController,
     viewModel: AccountsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    var addPartnerOpen by rememberSaveable { mutableStateOf(false) }
     var addCustomerOpen by rememberSaveable { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxWidth()) {
@@ -81,37 +79,31 @@ fun AccountsScreen(
         ) {
             item {
                 Header(
-                    state = state,
-                    pashto = if (state.subTab == AccountsSubTab.CUSTOMERS) "د حسابونو دفتر" else "د همکارو صرافانو دفتر",
-                    badge = if (state.subTab == AccountsSubTab.CUSTOMERS) "ACCOUNT HOLDERS" else "COUNTERPARTY SARAFS",
-                    badgeColor = if (state.subTab == AccountsSubTab.CUSTOMERS) DaftarColors.Green else DaftarColors.Ink,
-                    title = if (state.subTab == AccountsSubTab.CUSTOMERS) "Accounts" else "Partners",
-                    subtitle = if (state.subTab == AccountsSubTab.CUSTOMERS) {
-                        "${state.customerTotal} active accounts"
-                    } else "${state.partnerTotal} trading relationships",
+                    pashto = "د حسابونو دفتر",
+                    badge = "ACCOUNT HOLDERS",
+                    badgeColor = DaftarColors.Green,
+                    title = "Accounts",
+                    subtitle = "${state.customerTotal} active accounts",
+                    syncing = state.syncing,
+                    onSync = viewModel::sync,
                 )
             }
 
-            item {
-                SegmentedSwitcher(
-                    modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 12.dp),
-                ) {
-                    SegmentButton(
-                        selected = state.subTab == AccountsSubTab.CUSTOMERS,
-                        onClick = { viewModel.setSubTab(AccountsSubTab.CUSTOMERS) },
-                    ) {
-                        SubTabLabel(Icons.Rounded.BusinessCenter, "Customers", state.customerTotal, state.subTab == AccountsSubTab.CUSTOMERS)
-                    }
-                    SegmentButton(
-                        selected = state.subTab == AccountsSubTab.PARTNERS,
-                        onClick = { viewModel.setSubTab(AccountsSubTab.PARTNERS) },
-                    ) {
-                        SubTabLabel(Icons.Rounded.Group, "Partners", state.partnerTotal, state.subTab == AccountsSubTab.PARTNERS)
-                    }
+            if (state.customerTotal == 0) {
+                // v18 first-run empty state with a create-account CTA.
+                item {
+                    EmptyState(
+                        icon = Icons.Rounded.BusinessCenter,
+                        title = "No accounts yet",
+                        pashto = "تر اوسه هیڅ حساب نشته",
+                        sub = "Open an account for a customer to start tracking their deposits, withdrawals, and balance.",
+                        tone = EmptyStateTone.COPPER,
+                        ctaLabel = "Add account · نوی حساب",
+                        ctaIcon = Icons.Rounded.PersonAdd,
+                        onCta = { addCustomerOpen = true },
+                    )
                 }
-            }
-
-            if (state.subTab == AccountsSubTab.CUSTOMERS) {
+            } else {
                 item {
                     HoldingsCard(state)
                 }
@@ -150,103 +142,36 @@ fun AccountsScreen(
                         }
                     }
                 }
-            } else {
-                item { NetPositionCard(state) }
-                item {
-                    DaftarSearchField(state.search, viewModel::setSearch, "Search saraf or phone…")
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-                item {
-                    ListHeader("Showing ${state.partnerRows.size} of ${state.partnerTotal}", "Exposure")
-                }
-                if (state.partnerRows.isEmpty()) {
-                    item { EmptyNote("No partners match your search") }
-                } else {
-                    items(count = state.partnerRows.size, key = { i -> state.partnerRows[i].partner.id }) { i ->
-                        val row = state.partnerRows[i]
-                        PartyListRow(
-                            badge = { PartnerBadge(row.partner) },
-                            name = row.partner.name,
-                            sub = "${row.partner.city.displayName} · ${row.partner.hawalas.size} hawalas · ${row.partner.tier.label.uppercase()}",
-                            onClick = { navController.navigate(DaftarDestinations.partnerDetail(row.partner.id)) },
-                        ) {
-                            PositionLines(row.position)
-                        }
-                    }
-                }
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 16.dp)
-                            .dashedBorder(DaftarColors.LineDashed, 1.5.dp, 14.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .clickable { addPartnerOpen = true }
-                            .padding(vertical = 14.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.PersonAdd,
-                            contentDescription = null,
-                            tint = DaftarColors.InkSoft,
-                            modifier = Modifier.size(15.dp),
-                        )
-                        Spacer(modifier = Modifier.size(8.dp))
-                        Text(
-                            text = "Add partner · نوی صرافي",
-                            style = TextStyle(
-                                fontFamily = Inter,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 13.sp,
-                                color = DaftarColors.InkSoft,
-                            ),
-                        )
-                    }
-                }
             }
         }
 
-        // Dual CTA — customers sub-tab only
-        if (state.subTab == AccountsSubTab.CUSTOMERS) {
-            Row(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                DualCtaButton(
-                    label = "Create Account",
-                    pashto = "نوی حساب",
-                    icon = Icons.Rounded.PersonAdd,
-                    background = DaftarColors.Ink,
-                    modifier = Modifier.weight(1f),
-                    onClick = { addCustomerOpen = true },
-                )
-                DualCtaButton(
-                    label = "New Entry",
-                    pashto = "نوې لیکنه",
-                    icon = Icons.Rounded.Add,
-                    background = DaftarColors.Copper,
-                    modifier = Modifier.weight(1f),
-                    onClick = { navController.navigate(DaftarDestinations.newCustomerTx()) },
-                )
-            }
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            DualCtaButton(
+                label = "Create Account",
+                pashto = "نوی حساب",
+                icon = Icons.Rounded.PersonAdd,
+                background = DaftarColors.Ink,
+                modifier = Modifier.weight(1f),
+                onClick = { addCustomerOpen = true },
+            )
+            DualCtaButton(
+                label = "New Entry",
+                pashto = "نوې لیکنه",
+                icon = Icons.Rounded.Add,
+                background = DaftarColors.Copper,
+                modifier = Modifier.weight(1f),
+                onClick = { navController.navigate(DaftarDestinations.newCustomerTx()) },
+            )
         }
     }
 
-    if (addPartnerOpen) {
-        AddPartnerSheet(
-            onDismiss = { addPartnerOpen = false },
-            onSave = { name, shortName, initial, phone, city, tier, openings ->
-                viewModel.addPartner(name, shortName, initial, phone, city, tier, openings) {
-                    addPartnerOpen = false
-                }
-            },
-        )
-    }
     if (addCustomerOpen) {
         AddCustomerSheet(
             onDismiss = { addCustomerOpen = false },
@@ -261,12 +186,13 @@ fun AccountsScreen(
 
 @Composable
 private fun Header(
-    state: AccountsUiState,
     pashto: String,
     badge: String,
     badgeColor: Color,
     title: String,
     subtitle: String,
+    syncing: Boolean,
+    onSync: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -305,50 +231,7 @@ private fun Header(
                 style = TextStyle(fontFamily = Inter, fontSize = 12.sp, color = DaftarColors.Muted),
             )
         }
-        IconSquareButton(icon = Icons.Rounded.Refresh, onClick = {})
-    }
-}
-
-@Composable
-private fun SubTabLabel(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, count: Int, selected: Boolean) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = if (selected) DaftarColors.Paper else DaftarColors.Muted,
-            modifier = Modifier.size(13.dp),
-        )
-        Text(
-            text = label.uppercase(),
-            style = TextStyle(
-                fontFamily = JetBrainsMono,
-                fontWeight = FontWeight.Bold,
-                fontSize = 11.sp,
-                letterSpacing = 0.1.em,
-                color = if (selected) DaftarColors.Paper else DaftarColors.Muted,
-            ),
-        )
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(999.dp))
-                .background(
-                    if (selected) Color.White.copy(alpha = 0.15f) else DaftarColors.Ink.copy(alpha = 0.08f),
-                )
-                .padding(horizontal = 6.dp, vertical = 2.dp),
-        ) {
-            Text(
-                text = count.toString(),
-                style = TextStyle(
-                    fontFamily = JetBrainsMono,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 9.sp,
-                    color = if (selected) DaftarColors.Paper else DaftarColors.Muted,
-                ),
-            )
-        }
+        SyncIconButton(syncing = syncing, onClick = onSync)
     }
 }
 
@@ -379,51 +262,20 @@ private fun HoldingsCard(state: AccountsUiState) {
                 MonoLabel("Account Holdings · امانت", color = Color(0xFFA8D5BA))
             }
             Spacer(modifier = Modifier.height(3.dp))
-            MonoLabel("Funds held on behalf", color = DaftarColors.MutedLight, fontSize = 9, letterSpacing = 0.1)
+            // v18 stamps this card with an as-of date (the prototype hardcodes a
+            // fake one); we show today's real date instead.
+            MonoLabel(
+                "Funds held on behalf · " + remember { Formatters.fullDateLabel(System.currentTimeMillis()) },
+                color = DaftarColors.MutedLight,
+                fontSize = 9,
+                letterSpacing = 0.1,
+            )
         }
-        HorizontalDivider(color = DaftarColors.Paper.copy(alpha = 0.12f))
         Spacer(modifier = Modifier.height(14.dp))
         DarkBalanceGrid(
             position = state.custodialNet,
-            statusFor = { amt -> if (amt > 0.5) "ON DEPOSIT" else if (amt < -0.5) "ADVANCED" else "NIL" },
+            statusFor = { amt -> if (amt > 0) "ON DEPOSIT" else if (amt < 0) "ADVANCED" else "NIL" },
             accent = Color(0xFFA8D5BA),
-            modifier = Modifier.padding(horizontal = 8.dp),
-        )
-    }
-}
-
-@Composable
-private fun NetPositionCard(state: AccountsUiState) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-            .padding(bottom = 14.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .background(DaftarColors.Ink)
-            .padding(bottom = 14.dp),
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Rounded.TrendingUp,
-                    contentDescription = null,
-                    tint = DaftarColors.GoldSoft,
-                    modifier = Modifier.size(11.dp),
-                )
-                MonoLabel("Net Position · تجارتي حالت", color = DaftarColors.GoldSoft)
-            }
-            Spacer(modifier = Modifier.height(3.dp))
-            MonoLabel("Across all partners", color = DaftarColors.MutedLight, fontSize = 9, letterSpacing = 0.1)
-        }
-        HorizontalDivider(color = DaftarColors.Paper.copy(alpha = 0.12f))
-        Spacer(modifier = Modifier.height(14.dp))
-        DarkBalanceGrid(
-            position = state.globalPosition,
-            statusFor = { amt -> if (amt > 0.5) "LONG" else if (amt < -0.5) "SHORT" else "FLAT" },
             modifier = Modifier.padding(horizontal = 8.dp),
         )
     }

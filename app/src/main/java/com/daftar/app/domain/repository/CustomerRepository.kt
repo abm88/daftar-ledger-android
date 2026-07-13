@@ -15,6 +15,9 @@ interface CustomerRepository {
     /** Remove all customers and their transactions — a fresh account starts with a blank shop. */
     suspend fun clearAll()
 
+    /** Swap in another account's customer book (per-user persistence restore). */
+    suspend fun replaceAll(customers: List<Customer>)
+
     fun customerById(id: String): Customer?
     fun findTransaction(transactionId: String): Pair<CustomerTransaction, Customer>?
 }

@@ -178,7 +178,8 @@ fun StatementFooter(issuedLabel: String) {
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    "مهر صرافي\nKBL · ٢٠٢٦",
+                    // v18 stamp uses Western digits for the year.
+                    "مهر صرافي\nKBL · 2026",
                     style = TextStyle(
                         fontFamily = NotoNaskhArabic, fontWeight = FontWeight.Bold,
                         fontSize = 11.sp, color = DaftarColors.Copper, textAlign = TextAlign.Center,
@@ -189,10 +190,19 @@ fun StatementFooter(issuedLabel: String) {
     }
 }
 
-/** PDF / Print / WhatsApp action bar shared by all statements. */
+/**
+ * PDF / Print / WhatsApp action bar shared by all statements. When a
+ * [printSpec] is supplied, PDF and Print open the system print dialog with
+ * the v18-style A4 document ("Save as PDF" lives there, matching the
+ * prototype's window.print flow).
+ */
 @Composable
-fun StatementActions(modifier: Modifier = Modifier) {
+fun StatementActions(
+    modifier: Modifier = Modifier,
+    printSpec: (() -> com.daftar.app.core.print.StatementPrintSpec)? = null,
+) {
     val toaster = LocalToaster.current
+    val context = androidx.compose.ui.platform.LocalContext.current
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -202,11 +212,15 @@ fun StatementActions(modifier: Modifier = Modifier) {
     ) {
         StatementActionButton("PDF", Icons.Rounded.Download, DaftarColors.Ink, Modifier.weight(1f)) {
             toaster("Choose \"Save as PDF\" in print dialog", ToastIcon.DOWNLOAD)
+            printSpec?.let { com.daftar.app.core.print.StatementPrinter.print(context, it()) }
         }
         StatementActionButton("Print", Icons.Rounded.Print, DaftarColors.InkSoft, Modifier.weight(1f)) {
             toaster("Print dialog opened", ToastIcon.PRINTER)
+            printSpec?.let { com.daftar.app.core.print.StatementPrinter.print(context, it()) }
         }
         StatementActionButton("WhatsApp", Icons.Rounded.ChatBubble, DaftarColors.WhatsApp, Modifier.weight(1f)) {
+            // TODO(backend): real WhatsApp share needs a share intent + rendered
+            // document; toast-only in the prototype as well.
             toaster("Statement shared via WhatsApp", ToastIcon.MESSAGE)
         }
     }

@@ -20,7 +20,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -244,6 +248,49 @@ fun IconSquareButton(
                     .background(DaftarColors.Red),
             )
         }
+    }
+}
+
+/**
+ * Header refresh button that spins while a (simulated) ledger sync runs —
+ * the prototype's `data-action="sync"` icon with its `spin` class.
+ */
+@Composable
+fun SyncIconButton(
+    syncing: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    onDark: Boolean = false,
+) {
+    val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "sync")
+    val angle by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = androidx.compose.animation.core.tween(900, easing = androidx.compose.animation.core.LinearEasing),
+        ),
+        label = "syncAngle",
+    )
+    Box(
+        modifier = modifier
+            .size(36.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (onDark) DaftarColors.Paper.copy(alpha = 0.1f) else DaftarColors.PaperDeep)
+            .then(
+                if (onDark) Modifier
+                else Modifier.border(1.dp, DaftarColors.Line, RoundedCornerShape(10.dp)),
+            )
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = androidx.compose.material.icons.Icons.Rounded.Refresh,
+            contentDescription = "Sync",
+            tint = if (onDark) DaftarColors.Paper else DaftarColors.InkSoft,
+            modifier = Modifier
+                .size(17.dp)
+                .then(if (syncing) Modifier.rotate(angle) else Modifier),
+        )
     }
 }
 

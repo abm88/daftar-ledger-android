@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -67,7 +68,7 @@ class AssetManagementViewModel @Inject constructor(
             settingsRepository.setAssetActive(asset.code, !wasActive)
             toastCenter.show(
                 if (wasActive) "${asset.code} deactivated" else "${asset.code} activated · ${asset.name}",
-                if (wasActive) ToastIcon.CROSS else ToastIcon.CHECK,
+                if (wasActive) ToastIcon.MINUS else ToastIcon.CHECK,
             )
         }
     }
@@ -102,7 +103,7 @@ fun AssetManagementScreen(
                 MonoLabel("How this works", color = DaftarColors.CopperDeep, fontSize = 9)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "Toggle on the currencies and metals your shop deals in. Active assets appear " +
+                    "Toggle on the currencies and metals your daftar deals in. Active assets appear " +
                         "on your Cash card, in the FX form, and in customer transactions. " +
                         "USD, AFN, and PKR are always on.",
                     style = TextStyle(fontFamily = Inter, fontSize = 11.sp, color = DaftarColors.CopperDeep),
@@ -128,19 +129,29 @@ fun AssetManagementScreen(
 
 @Composable
 private fun AssetToggleRow(asset: Asset, active: Boolean, onToggle: () -> Unit) {
+    // v18 visually mutes locked default rows: paper-deep surface, 85% opacity,
+    // and a washed-out toggle — signalling they can't be turned off.
+    val locked = asset.isDefault
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 8.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(if (active) DaftarColors.PaperSoft else DaftarColors.PaperDeep.copy(alpha = 0.5f))
+            .background(
+                when {
+                    locked -> DaftarColors.PaperDeep
+                    active -> DaftarColors.PaperSoft
+                    else -> DaftarColors.PaperDeep.copy(alpha = 0.5f)
+                },
+            )
             .border(
                 1.dp,
-                if (active) DaftarColors.LineStrong else DaftarColors.Line,
+                if (active && !locked) DaftarColors.LineStrong else DaftarColors.Line,
                 RoundedCornerShape(12.dp),
             )
             .clickable(enabled = !asset.isDefault, onClick = onToggle)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(horizontal = 14.dp, vertical = 12.dp)
+            .then(if (locked) Modifier.alpha(0.85f) else Modifier),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -178,10 +189,11 @@ private fun AssetToggleRow(asset: Asset, active: Boolean, onToggle: () -> Unit) 
                 style = TextStyle(fontFamily = JetBrainsMono, fontSize = 10.sp, color = DaftarColors.Muted),
             )
         }
-        // Toggle track
+        // Toggle track (washed out at 55% when the row is locked, per v18)
         Box(
             modifier = Modifier
                 .size(width = 40.dp, height = 24.dp)
+                .then(if (locked) Modifier.alpha(0.55f) else Modifier)
                 .clip(CircleShape)
                 .background(if (active) DaftarColors.Green else DaftarColors.LineStrong),
             contentAlignment = if (active) Alignment.CenterEnd else Alignment.CenterStart,

@@ -15,4 +15,7 @@ interface CashRepository {
 
     /** Empty the drawer — a fresh account starts with a blank shop. */
     suspend fun clearAll()
+
+    /** Swap in another account's drawer (per-user persistence restore). */
+    suspend fun replaceAll(drawer: CashDrawer)
 }

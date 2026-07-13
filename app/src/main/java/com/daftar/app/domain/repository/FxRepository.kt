@@ -11,4 +11,7 @@ interface FxRepository {
 
     /** Remove all trades — a fresh account starts with a blank shop. */
     suspend fun clearAll()
+
+    /** Swap in another account's trade log (per-user persistence restore). */
+    suspend fun replaceAll(trades: List<FxTrade>)
 }

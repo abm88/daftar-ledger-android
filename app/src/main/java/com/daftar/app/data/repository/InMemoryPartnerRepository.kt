@@ -50,6 +50,10 @@ class InMemoryPartnerRepository @Inject constructor(seed: SeedData) : PartnerRep
         state.value = emptyList()
     }
 
+    override suspend fun replaceAll(partners: List<Counterparty>) {
+        state.value = partners
+    }
+
     override fun partnerById(id: String): Counterparty? =
         state.value.firstOrNull { it.id == id }
 

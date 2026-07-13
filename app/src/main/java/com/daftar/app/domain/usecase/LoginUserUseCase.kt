@@ -1,24 +1,23 @@
 package com.daftar.app.domain.usecase
 
+import com.daftar.app.data.session.UserDataSession
 import com.daftar.app.domain.repository.AuthRepository
 import com.daftar.app.domain.repository.AuthResult
 import javax.inject.Inject
 
 /**
- * Signs a saraf in. Until per-user persistence exists the ledger lives in
- * process memory, so login guarantees isolation rather than restoration: an
- * in-memory ledger owned by a different account is wiped, never shown to the
- * newly signed-in user.
+ * Signs a saraf in and restores their own shop data (v18): a returning user
+ * gets their saved daftar back, and a user with no saved data starts from a
+ * blank shop — the demo ledger is never shown to a signed-in account.
  */
 class LoginUserUseCase @Inject constructor(
     private val authRepository: AuthRepository,
-    private val clearShopData: ClearShopDataUseCase,
-    private val ledgerOwnership: LedgerOwnership,
+    private val userDataSession: UserDataSession,
 ) {
     suspend operator fun invoke(email: String, password: String): AuthResult {
         val result = authRepository.login(email, password)
-        if (result is AuthResult.Success && !ledgerOwnership.claim(result.user.id)) {
-            clearShopData()
+        if (result is AuthResult.Success) {
+            userDataSession.beginSession(result.user.id)
         }
         return result
     }

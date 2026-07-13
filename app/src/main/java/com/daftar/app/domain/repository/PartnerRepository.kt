@@ -16,6 +16,9 @@ interface PartnerRepository {
     /** Remove all partners and their hawalas — a fresh account starts with a blank shop. */
     suspend fun clearAll()
 
+    /** Swap in another account's partner ledgers (per-user persistence restore). */
+    suspend fun replaceAll(partners: List<Counterparty>)
+
     fun partnerById(id: String): Counterparty?
     fun findHawala(hawalaId: String): Pair<Hawala, Counterparty>?
 }

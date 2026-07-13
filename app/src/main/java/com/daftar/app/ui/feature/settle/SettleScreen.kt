@@ -30,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -247,7 +248,9 @@ fun SettleScreen(
                             .clip(RoundedCornerShape(12.dp))
                             .background(DaftarColors.PaperSoft)
                             .border(1.dp, DaftarColors.Line, RoundedCornerShape(12.dp))
-                            .padding(12.dp),
+                            .padding(12.dp)
+                            // v18 dims fully-flat rows to 45% opacity.
+                            .then(if (!open) Modifier.alpha(0.45f) else Modifier),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
