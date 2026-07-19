@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlin.math.roundToLong
 
 // v20 removed the From/To city pickers from the send form.
 enum class HawalaPicker { NONE, PARTNER, SENDER_ACCOUNT }
@@ -158,7 +159,7 @@ class NewHawalaViewModel @Inject constructor(
             if (amount > 0) {
                 val seeded = amount * current.commissionPercent / 100
                 fixedText = if (current.currency == "USD") String.format(java.util.Locale.US, "%.2f", seeded)
-                else kotlin.math.roundToLong(seeded).toString() // v18 toFixed(0) rounds
+                else seeded.roundToLong().toString() // v18 toFixed(0) rounds
             }
         }
         form.value = current.copy(commissionMode = mode, commissionFixedText = fixedText)
