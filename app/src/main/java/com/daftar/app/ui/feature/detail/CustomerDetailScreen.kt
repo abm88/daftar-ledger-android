@@ -156,9 +156,28 @@ fun CustomerDetailScreen(
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        IconSquareButton(Icons.AutoMirrored.Rounded.ArrowBack, { navController.popBackStack() }, onDark = true)
+                        // v20: the customer name moves into the title row; no avatar badge.
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            IconSquareButton(Icons.AutoMirrored.Rounded.ArrowBack, { navController.popBackStack() }, onDark = true)
+                            Text(
+                                text = customer.name,
+                                style = TextStyle(
+                                    fontFamily = Fraunces,
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 20.sp,
+                                    letterSpacing = (-0.02).em,
+                                    color = DaftarColors.Paper,
+                                ),
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            )
+                        }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             // TODO(backend): fire an ACTION_DIAL intent; toast-only in the prototype too.
                             IconSquareButton(Icons.Rounded.Phone, { toaster("Dialling ${customer.phone}…", ToastIcon.PHONE) }, onDark = true)
@@ -169,50 +188,26 @@ fun CustomerDetailScreen(
                             )
                         }
                     }
-                    Spacer(Modifier.height(16.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    ) {
-                        CustomerBadge(customer, 56.dp)
-                        Column {
-                            Text(
-                                text = customer.name,
-                                style = TextStyle(
-                                    fontFamily = Fraunces,
-                                    fontWeight = FontWeight.Medium,
-                                    fontSize = 22.sp,
-                                    letterSpacing = (-0.02).em,
-                                    color = DaftarColors.Paper,
-                                ),
-                            )
-                            Spacer(Modifier.height(6.dp))
-                            NetPositionChip(
-                                net = state.netReporting,
-                                currency = state.reportingCurrency,
-                                decimals = state.reportingDecimals,
-                            )
-                            Spacer(Modifier.height(6.dp))
-                            Text(
-                                text = "${customer.city.displayName.uppercase()} · ${customer.phone}",
-                                style = TextStyle(
-                                    fontFamily = JetBrainsMono,
-                                    fontSize = 11.sp,
-                                    letterSpacing = 0.1.em,
-                                    color = DaftarColors.GoldSoft,
-                                ),
-                            )
-                            Spacer(Modifier.height(2.dp))
-                            Text(
-                                text = "Account since ${customer.accountOpenedLabel}",
-                                style = TextStyle(
-                                    fontFamily = JetBrainsMono,
-                                    fontSize = 10.sp,
-                                    color = DaftarColors.MutedLight,
-                                ),
-                            )
-                        }
-                    }
+                    Spacer(Modifier.height(14.dp))
+                    // v20 removed the net-balance chip; keep city/phone + "Account since".
+                    Text(
+                        text = "${customer.city.displayName.uppercase()} · ${customer.phone}",
+                        style = TextStyle(
+                            fontFamily = JetBrainsMono,
+                            fontSize = 11.sp,
+                            letterSpacing = 0.1.em,
+                            color = DaftarColors.GoldSoft,
+                        ),
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = "Account since ${customer.accountOpenedLabel}",
+                        style = TextStyle(
+                            fontFamily = JetBrainsMono,
+                            fontSize = 10.sp,
+                            color = DaftarColors.MutedLight,
+                        ),
+                    )
                     Spacer(Modifier.height(16.dp))
                     HorizontalDivider(color = DaftarColors.Paper.copy(alpha = 0.15f))
                     Spacer(Modifier.height(14.dp))

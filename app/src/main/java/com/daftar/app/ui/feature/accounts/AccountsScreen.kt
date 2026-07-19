@@ -17,6 +17,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.ArrowDownward
+import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.BusinessCenter
 import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material3.HorizontalDivider
@@ -86,6 +88,7 @@ fun AccountsScreen(
                     subtitle = "${state.customerTotal} active accounts",
                     syncing = state.syncing,
                     onSync = viewModel::sync,
+                    onAddAccount = { addCustomerOpen = true },
                 )
             }
 
@@ -153,21 +156,22 @@ fun AccountsScreen(
                 .padding(bottom = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            // v20 bottom CTAs: You Received (green) + You Gave (red).
             DualCtaButton(
-                label = "Create Account",
-                pashto = "نوی حساب",
-                icon = Icons.Rounded.PersonAdd,
-                background = DaftarColors.Ink,
+                label = "You Received",
+                pashto = "ترلاسه کړل",
+                icon = Icons.Rounded.ArrowDownward,
+                background = DaftarColors.Green,
                 modifier = Modifier.weight(1f),
-                onClick = { addCustomerOpen = true },
+                onClick = { navController.navigate(DaftarDestinations.newCustomerTx(mode = "received")) },
             )
             DualCtaButton(
-                label = "New Entry",
-                pashto = "نوې لیکنه",
-                icon = Icons.Rounded.Add,
-                background = DaftarColors.Copper,
+                label = "You Gave",
+                pashto = "ورکړل",
+                icon = Icons.Rounded.ArrowUpward,
+                background = DaftarColors.Red,
                 modifier = Modifier.weight(1f),
-                onClick = { navController.navigate(DaftarDestinations.newCustomerTx()) },
+                onClick = { navController.navigate(DaftarDestinations.newCustomerTx(mode = "gave")) },
             )
         }
     }
@@ -193,6 +197,7 @@ private fun Header(
     subtitle: String,
     syncing: Boolean,
     onSync: () -> Unit,
+    onAddAccount: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -231,7 +236,11 @@ private fun Header(
                 style = TextStyle(fontFamily = Inter, fontSize = 12.sp, color = DaftarColors.Muted),
             )
         }
-        SyncIconButton(syncing = syncing, onClick = onSync)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            // v20: create-account (user-plus) icon in the title row.
+            com.daftar.app.ui.common.IconSquareButton(Icons.Rounded.PersonAdd, onAddAccount)
+            SyncIconButton(syncing = syncing, onClick = onSync)
+        }
     }
 }
 
