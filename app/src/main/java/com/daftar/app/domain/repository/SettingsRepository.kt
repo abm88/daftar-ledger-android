@@ -18,4 +18,7 @@ interface SettingsRepository {
 
     /** Swap in another account's preferences (per-user persistence restore / blank-shop reset). */
     suspend fun replaceSettings(settings: LedgerSettings)
+
+    /** Replace the server-owned shop identity after auth/profile hydration. */
+    suspend fun replaceShopProfile(profile: ShopProfile)
 }

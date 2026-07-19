@@ -55,6 +55,7 @@ import com.daftar.app.domain.model.TeamMember
 import com.daftar.app.domain.repository.RatesRepository
 import com.daftar.app.domain.repository.SettingsRepository
 import com.daftar.app.domain.repository.TeamRepository
+import com.daftar.app.domain.repository.LedgerMutationRepository
 import com.daftar.app.ui.common.BigAmountInput
 import com.daftar.app.ui.common.FieldBox
 import com.daftar.app.ui.common.FieldTextInput
@@ -101,6 +102,7 @@ data class NewExpenseUiState(
 @HiltViewModel
 class NewExpenseViewModel @Inject constructor(
     private val teamRepository: TeamRepository,
+    private val mutations: LedgerMutationRepository,
     ratesRepository: RatesRepository,
     settingsRepository: SettingsRepository,
     private val timeProvider: TimeProvider,
@@ -151,9 +153,12 @@ class NewExpenseViewModel @Inject constructor(
                 role = role,
                 phone = phone.trim().ifEmpty { null },
             )
-            teamRepository.addMember(member)
+            val created = runCatching { mutations.createTeamMember(member) }.getOrElse {
+                toastCenter.show(it.message ?: "Unable to add member", ToastIcon.CROSS)
+                return@launch
+            }
             toastCenter.show("Member added · $trimmed", ToastIcon.PERSON_ADD)
-            form.value = form.value.copy(teamMemberId = member.id, addMemberOpen = false, pickerOpen = false)
+            form.value = form.value.copy(teamMemberId = created.id, addMemberOpen = false, pickerOpen = false)
         }
     }
 
@@ -182,7 +187,11 @@ class NewExpenseViewModel @Inject constructor(
                 timestampMillis = now,
                 dateLabel = "Today",
             )
-            teamRepository.addExpense(expense)
+            val saved = runCatching { mutations.createExpense(expense) }
+            if (saved.isFailure) {
+                toastCenter.show(saved.exceptionOrNull()?.message ?: "Unable to record expense", ToastIcon.CROSS)
+                return@launch
+            }
             val member = teamRepository.memberById(f.teamMemberId)
             toastCenter.show(
                 "Expense · ${member?.name ?: ""} · ${Formatters.number(state.amount, AssetCatalog.decimalsFor(f.currency))} ${f.currency}",

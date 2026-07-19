@@ -50,6 +50,7 @@ import com.daftar.app.core.time.TimeProvider
 import com.daftar.app.domain.model.LedgerEntry
 import com.daftar.app.domain.model.LedgerEntryKind
 import com.daftar.app.domain.repository.RatesRepository
+import com.daftar.app.domain.repository.LedgerRefreshRepository
 import com.daftar.app.domain.usecase.ActivityFeedBuilder
 import com.daftar.app.ui.common.DaftarFilterChip
 import com.daftar.app.ui.common.DaftarSearchField
@@ -126,6 +127,7 @@ class GeneralLedgerViewModel @Inject constructor(
     activityFeedBuilder: ActivityFeedBuilder,
     ratesRepository: RatesRepository,
     private val settingsRepository: com.daftar.app.domain.repository.SettingsRepository,
+    private val ledgerRefresh: LedgerRefreshRepository,
     private val timeProvider: TimeProvider,
     private val toastCenter: com.daftar.app.ui.common.ToastCenter,
 ) : ViewModel() {
@@ -134,14 +136,16 @@ class GeneralLedgerViewModel @Inject constructor(
     private val search = MutableStateFlow("")
     private val syncing = MutableStateFlow(false)
 
-    // TODO(backend): replace the simulated delay with a real ledger-sync call.
     fun sync() {
         if (syncing.value) return
         viewModelScope.launch {
             syncing.value = true
-            kotlinx.coroutines.delay(1100)
+            val result = runCatching { ledgerRefresh.refresh() }
             syncing.value = false
-            toastCenter.show("Ledger synced", com.daftar.app.ui.common.ToastIcon.REFRESH)
+            toastCenter.show(
+                if (result.isSuccess) "Ledger synced" else result.exceptionOrNull()?.message ?: "Unable to sync ledger",
+                if (result.isSuccess) com.daftar.app.ui.common.ToastIcon.REFRESH else com.daftar.app.ui.common.ToastIcon.CROSS,
+            )
         }
     }
 

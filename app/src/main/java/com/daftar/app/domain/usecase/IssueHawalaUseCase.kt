@@ -4,12 +4,11 @@ import com.daftar.app.core.format.Formatters
 import com.daftar.app.core.time.TimeProvider
 import com.daftar.app.domain.model.City
 import com.daftar.app.domain.model.CommissionMode
-import com.daftar.app.domain.model.CustomerTransaction
-import com.daftar.app.domain.model.CustomerTxType
 import com.daftar.app.domain.model.Hawala
 import com.daftar.app.domain.model.HawalaStatus
 import com.daftar.app.domain.model.HawalaType
 import com.daftar.app.domain.repository.CustomerRepository
+import com.daftar.app.domain.repository.LedgerMutationRepository
 import com.daftar.app.domain.repository.PartnerRepository
 import javax.inject.Inject
 
@@ -34,22 +33,23 @@ data class HawalaDraft(
 
 sealed interface IssueHawalaResult {
     data class Issued(val hawalaId: String, val debitedCustomerName: String?) : IssueHawalaResult
+    data class Failure(val message: String) : IssueHawalaResult
     enum class Error : IssueHawalaResult {
         INVALID_AMOUNT, MISSING_RECEIVER, MISSING_SENDER,
-        MISSING_SENDER_ACCOUNT, INSUFFICIENT_BALANCE, UNKNOWN_PARTNER,
+        MISSING_SENDER_ACCOUNT, UNKNOWN_PARTNER,
     }
 }
 
 /**
- * Issues a hawala: validates the draft, appends the pending entry to the
- * partner ledger, and — in account mode — debits the sender's customer account
- * for amount + commission with a linked withdrawal entry.
+ * Validates and issues a hawala through the backend mutation port. Account-mode
+ * debits may create an advance: a negative customer balance is money owed to
+ * the saraf, not a rejected insufficient-funds condition.
  */
 class IssueHawalaUseCase @Inject constructor(
     private val partnerRepository: PartnerRepository,
     private val customerRepository: CustomerRepository,
-    private val positionCalculator: PositionCalculator,
     private val commissionCalculator: CommissionCalculator,
+    private val mutations: LedgerMutationRepository,
     private val timeProvider: TimeProvider,
 ) {
     suspend operator fun invoke(draft: HawalaDraft): IssueHawalaResult {
@@ -65,10 +65,6 @@ class IssueHawalaUseCase @Inject constructor(
         val senderCustomer = if (draft.senderMode == SenderMode.ACCOUNT) {
             val customer = draft.senderCustomerId?.let(customerRepository::customerById)
                 ?: return IssueHawalaResult.Error.MISSING_SENDER_ACCOUNT
-            val available = positionCalculator.customerBalance(customer)[draft.currency]
-            if (available < draft.amount + commission - 0.5) {
-                return IssueHawalaResult.Error.INSUFFICIENT_BALANCE
-            }
             customer
         } else {
             if (draft.senderName.isBlank()) return IssueHawalaResult.Error.MISSING_SENDER
@@ -79,50 +75,33 @@ class IssueHawalaUseCase @Inject constructor(
         val hawalaId = "h_$now"
         val senderName = senderCustomer?.name ?: draft.senderName.trim()
 
-        partnerRepository.addHawala(
-            draft.partnerId,
-            Hawala(
-                id = hawalaId,
-                type = HawalaType.SEND,
-                fromCity = draft.fromCity,
-                toCity = draft.toCity,
-                senderName = senderName,
-                receiverName = draft.receiverName.trim(),
-                amount = draft.amount,
-                currency = draft.currency,
-                commissionPercent = if (draft.commissionMode == CommissionMode.PERCENT) draft.commissionPercent else 0.0,
-                commissionMode = draft.commissionMode,
-                commissionAmount = commission,
-                pickupCode = draft.pickupCode,
-                status = HawalaStatus.PENDING,
-                timestampMillis = now,
-                dateLabel = "Just now",
-                senderCustomerId = senderCustomer?.id,
-            ),
-        )
-
-        if (senderCustomer != null) {
-            val commissionNote = if (draft.commissionMode == CommissionMode.FIXED) {
-                "incl. ${Formatters.amount(commission, draft.currency)} ${draft.currency} commission"
-            } else {
-                "incl. ${Formatters.rate(draft.commissionPercent, 1)}% commission"
-            }
-            customerRepository.addTransaction(
-                senderCustomer.id,
-                CustomerTransaction(
-                    id = "ct_haw_$now",
-                    type = CustomerTxType.WITHDRAWAL,
-                    amount = draft.amount + commission,
+        val created = try {
+            mutations.issueHawala(
+                counterpartyId = draft.partnerId,
+                hawala = Hawala(
+                    id = hawalaId,
+                    type = HawalaType.SEND,
+                    fromCity = draft.fromCity,
+                    toCity = draft.toCity,
+                    senderName = senderName,
+                    receiverName = draft.receiverName.trim(),
+                    amount = draft.amount,
                     currency = draft.currency,
-                    dateLabel = Formatters.fullDateLabel(now),
+                    commissionPercent = if (draft.commissionMode == CommissionMode.PERCENT) draft.commissionPercent else 0.0,
+                    commissionMode = draft.commissionMode,
+                    commissionAmount = commission,
+                    pickupCode = draft.pickupCode,
+                    status = HawalaStatus.PENDING,
                     timestampMillis = now,
-                    note = "Hawala to ${draft.receiverName.trim()} · ${draft.fromCity.code} → " +
-                        "${draft.toCity.code} · code ${draft.pickupCode} ($commissionNote)",
-                    hawalaId = hawalaId,
+                    dateLabel = "Just now",
+                    senderCustomerId = senderCustomer?.id,
                 ),
+                senderMode = draft.senderMode.name.lowercase(),
+                commissionFixed = draft.commissionFixed.takeIf { draft.commissionMode == CommissionMode.FIXED },
             )
+        } catch (error: Exception) {
+            return IssueHawalaResult.Failure(error.message ?: "Unable to issue hawala")
         }
-
-        return IssueHawalaResult.Issued(hawalaId, senderCustomer?.name)
+        return IssueHawalaResult.Issued(created.id, senderCustomer?.name)
     }
 }

@@ -121,7 +121,11 @@ class CustomerTxDetailViewModel @Inject constructor(
 
     fun delete(onDeleted: () -> Unit) {
         viewModelScope.launch {
-            deleteTransaction(txId)
+            val result = runCatching { deleteTransaction(txId) }
+            if (result.isFailure) {
+                toastCenter.show(result.exceptionOrNull()?.message ?: "Unable to delete entry", ToastIcon.CROSS)
+                return@launch
+            }
             toastCenter.show("Entry deleted", ToastIcon.CROSS)
             onDeleted()
         }

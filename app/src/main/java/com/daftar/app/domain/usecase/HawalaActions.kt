@@ -4,22 +4,20 @@ import com.daftar.app.core.format.Formatters
 import com.daftar.app.core.time.TimeProvider
 import com.daftar.app.domain.model.City
 import com.daftar.app.domain.model.CommissionMode
-import com.daftar.app.domain.model.CustomerTransaction
-import com.daftar.app.domain.model.CustomerTxType
 import com.daftar.app.domain.model.Hawala
 import com.daftar.app.domain.model.HawalaStatus
 import com.daftar.app.domain.model.HawalaType
 import com.daftar.app.domain.repository.CustomerRepository
+import com.daftar.app.domain.repository.LedgerMutationRepository
 import com.daftar.app.domain.repository.PartnerRepository
-import com.daftar.app.domain.repository.RatesRepository
 import javax.inject.Inject
 
 /** Marks a pending hawala as paid out to the receiver. */
 class MarkHawalaPaidUseCase @Inject constructor(
-    private val partnerRepository: PartnerRepository,
+    private val mutations: LedgerMutationRepository,
 ) {
     suspend operator fun invoke(hawalaId: String) {
-        partnerRepository.markHawalaPaid(hawalaId, "Just paid")
+        mutations.markHawalaPaid(hawalaId)
     }
 }
 
@@ -28,17 +26,10 @@ class MarkHawalaPaidUseCase @Inject constructor(
  * account debit (a send funded from a customer account). v20 Cancel Hawala.
  */
 class CancelHawalaUseCase @Inject constructor(
-    private val partnerRepository: PartnerRepository,
-    private val customerRepository: CustomerRepository,
+    private val mutations: LedgerMutationRepository,
 ) {
     suspend operator fun invoke(hawalaId: String) {
-        // Reverse the account debit created when the sender paid from an account.
-        customerRepository.customers.value.forEach { customer ->
-            customer.transactions.firstOrNull { it.hawalaId == hawalaId }?.let {
-                customerRepository.deleteTransaction(it.id)
-            }
-        }
-        partnerRepository.removeHawala(hawalaId)
+        mutations.cancelHawala(hawalaId)
     }
 }
 
@@ -48,31 +39,12 @@ class CancelHawalaUseCase @Inject constructor(
  */
 class PayOutHawalaUseCase @Inject constructor(
     private val partnerRepository: PartnerRepository,
-    private val customerRepository: CustomerRepository,
-    private val timeProvider: TimeProvider,
+    private val mutations: LedgerMutationRepository,
 ) {
     /** @param creditCustomerId non-null pays into that account; null pays cash. */
     suspend operator fun invoke(hawalaId: String, creditCustomerId: String?) {
         val found = partnerRepository.findHawala(hawalaId) ?: return
-        val hawala = found.first
-        partnerRepository.markHawalaPaid(hawalaId, "Just paid")
-        if (creditCustomerId != null) {
-            val net = hawala.amount - hawala.resolvedCommissionAmount
-            val now = timeProvider.nowMillis()
-            customerRepository.addTransaction(
-                creditCustomerId,
-                CustomerTransaction(
-                    id = "ct_payout_$now",
-                    type = CustomerTxType.DEPOSIT,
-                    amount = net,
-                    currency = hawala.currency,
-                    dateLabel = Formatters.fullDateLabel(now),
-                    timestampMillis = now,
-                    note = "Hawala payout · code ${hawala.pickupCode}",
-                    hawalaId = hawalaId,
-                ),
-            )
-        }
+        mutations.markHawalaPaid(hawalaId, creditCustomerId)
     }
 }
 
@@ -93,6 +65,7 @@ data class ReceiveHawalaDraft(
 class RecordReceiveHawalaUseCase @Inject constructor(
     private val partnerRepository: PartnerRepository,
     private val codeGenerator: PickupCodeGenerator,
+    private val mutations: LedgerMutationRepository,
     private val timeProvider: TimeProvider,
 ) {
     /** @return the new hawala id, or null when the draft is incomplete. */
@@ -120,26 +93,31 @@ class RecordReceiveHawalaUseCase @Inject constructor(
             timestampMillis = now,
             dateLabel = Formatters.nowLabel(now),
         )
-        partnerRepository.addHawala(partnerId, hawala)
-        return id
+        return mutations.issueHawala(
+            counterpartyId = partnerId,
+            hawala = hawala,
+            senderMode = null,
+            commissionFixed = null,
+        ).id
     }
 }
 
 /** Removes a customer ledger entry (used from the entry detail screen). */
 class DeleteCustomerTransactionUseCase @Inject constructor(
-    private val customerRepository: CustomerRepository,
+    private val mutations: LedgerMutationRepository,
 ) {
     suspend operator fun invoke(transactionId: String) {
-        customerRepository.deleteTransaction(transactionId)
+        mutations.deleteCustomerTransaction(transactionId)
     }
 }
 
 /** Persists today's buy/sell quotes; the repository re-derives deltas and pair rates. */
 class UpdateRatesUseCase @Inject constructor(
-    private val ratesRepository: RatesRepository,
+    private val mutations: LedgerMutationRepository,
 ) {
-    suspend operator fun invoke(quotes: Map<String, Pair<Double, Double>>) {
+    suspend operator fun invoke(quotes: Map<String, Pair<Double, Double>>): Boolean {
         val valid = quotes.filterValues { (buy, sell) -> buy > 0 && sell > 0 }
-        if (valid.isNotEmpty()) ratesRepository.updateAssetRates(valid)
+        if (valid.isEmpty()) return false
+        return runCatching { mutations.updateRates(valid) }.isSuccess
     }
 }

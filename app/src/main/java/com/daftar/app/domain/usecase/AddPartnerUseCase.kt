@@ -9,6 +9,7 @@ import com.daftar.app.domain.model.HawalaType
 import com.daftar.app.domain.model.PartnerTier
 import com.daftar.app.domain.model.SYNTHETIC_CODE
 import com.daftar.app.domain.repository.PartnerRepository
+import com.daftar.app.domain.repository.LedgerMutationRepository
 import javax.inject.Inject
 
 data class NewPartnerDraft(
@@ -25,6 +26,7 @@ data class NewPartnerDraft(
 /** Registers a partner; opening balances become synthetic paid entries (code 000000). */
 class AddPartnerUseCase @Inject constructor(
     private val partnerRepository: PartnerRepository,
+    private val mutations: LedgerMutationRepository,
     private val timeProvider: TimeProvider,
 ) {
     suspend operator fun invoke(draft: NewPartnerDraft): Counterparty? {
@@ -62,7 +64,6 @@ class AddPartnerUseCase @Inject constructor(
             tier = draft.tier,
             hawalas = openingEntries,
         )
-        partnerRepository.addPartner(partner)
-        return partner
+        return runCatching { mutations.createCounterparty(partner, draft.openingBalances) }.getOrNull()
     }
 }

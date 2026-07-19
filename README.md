@@ -3,7 +3,7 @@
 A native Android ledger app for Afghanistan's money-changing trade (sarafi): hawala
 transfers, customer accounts, FX trading with cost-basis P&L, partner settlements,
 and printable statements. Built end-to-end from the high-fidelity HTML prototype
-(`daftarapp_12.html`) — UI and business logic only; API integration comes later.
+(`daftarapp_12.html`) and integrated with the Daftar REST API.
 
 ## Stack
 
@@ -28,8 +28,8 @@ com.daftar.app
 │                   # hawala issuance, FX booking, settlements, …
 ├── data/
 │   ├── seed/       # Prototype demo dataset
-│   └── repository/ # In-memory StateFlow-backed implementations.
-│                   # Swap these for API-backed ones later — nothing above changes.
+│   ├── remote/     # HTTP transport, typed API facade, DTO mappers, sync, mutations
+│   └── repository/ # StateFlow-backed read cache hydrated from the server
 ├── di/             # Hilt modules binding data → domain
 └── ui/
     ├── theme/      # Palette, typography, shapes (mirrors the prototype's CSS vars)
@@ -65,7 +65,7 @@ com.daftar.app
 
 ```bash
 ./gradlew :app:assembleDebug     # requires Android SDK 35
-./gradlew :app:testDebugUnitTest # domain unit tests
+./gradlew :app:testDebugUnitTest # domain + API transport/contract tests
 ```
 
 > The cloud sandbox this project was authored in blocks `dl.google.com`, so the
@@ -74,7 +74,25 @@ com.daftar.app
 > the standalone Kotlin 2.0.21 compiler; the full app build should be run locally
 > or in CI with normal network access.
 
-## API integration (later)
+## API integration
 
-Repository interfaces in `domain/repository` are the seam: implement them against
-the backend, swap the Hilt bindings in `di/AppModule.kt`, and delete `data/seed`.
+The app uses the backend's `/api/v1` contract through a single authenticated
+transport and typed `DaftarApi` facade. Domain and UI code depend on repository
+ports; backend DTOs stay in `data/remote`. Successful writes refresh the read
+cache so server-generated IDs, linked ledger rows, balances, and P&L remain
+authoritative.
+
+The emulator default is `http://10.0.2.2:3000/`. Override it for a device or
+deployed environment:
+
+```bash
+./gradlew :app:assembleDebug -PDAFTAR_API_BASE_URL=https://api.example.com/
+```
+
+The deterministic suite verifies every documented method/path offline. An
+optional live smoke test registers a fresh account and decodes the initial API
+snapshot when a backend is available:
+
+```bash
+DAFTAR_INTEGRATION_BASE_URL=http://localhost:3000/ ./gradlew :app:testDebugUnitTest
+```

@@ -10,8 +10,8 @@ sealed interface AuthResult {
 }
 
 /**
- * Accounts and the active session. Backed by device-local storage for now;
- * swaps for an API-backed implementation without touching UI or use cases.
+ * Accounts and the active server session. Presentation depends only on this
+ * port; bearer-token persistence and HTTP remain data-layer concerns.
  */
 interface AuthRepository {
     /** The signed-in saraf, or null when the auth gate should show. Restored across launches. */

@@ -197,6 +197,7 @@ class FxFormViewModel @Inject constructor(
                 }
                 RecordFxResult.Error.INSUFFICIENT_CASH ->
                     toastCenter.show("Insufficient ${state.form.fromCurrency} cash", ToastIcon.CROSS)
+                is RecordFxResult.Failure -> toastCenter.show(result.message, ToastIcon.CROSS)
                 else -> toastCenter.show("Check the trade and try again", ToastIcon.CROSS)
             }
         }

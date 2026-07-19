@@ -7,6 +7,7 @@ import com.daftar.app.domain.model.Customer
 import com.daftar.app.domain.model.CustomerTransaction
 import com.daftar.app.domain.model.CustomerTxType
 import com.daftar.app.domain.repository.CustomerRepository
+import com.daftar.app.domain.repository.LedgerMutationRepository
 import javax.inject.Inject
 
 data class NewCustomerDraft(
@@ -23,6 +24,7 @@ data class NewCustomerDraft(
 /** Opens a customer account; positive opening deposits become OPENING entries. */
 class AddCustomerUseCase @Inject constructor(
     private val customerRepository: CustomerRepository,
+    private val mutations: LedgerMutationRepository,
     private val timeProvider: TimeProvider,
 ) {
     suspend operator fun invoke(draft: NewCustomerDraft): Customer? {
@@ -57,7 +59,6 @@ class AddCustomerUseCase @Inject constructor(
             notes = draft.notes.trim().ifEmpty { null },
             transactions = openingTxs,
         )
-        customerRepository.addCustomer(customer)
-        return customer
+        return runCatching { mutations.createCustomer(customer, draft.openingDeposits) }.getOrNull()
     }
 }

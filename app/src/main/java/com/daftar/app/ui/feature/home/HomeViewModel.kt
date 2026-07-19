@@ -12,6 +12,7 @@ import com.daftar.app.domain.model.LedgerSettings
 import com.daftar.app.domain.model.RateBook
 import com.daftar.app.domain.model.ShopProfile
 import com.daftar.app.domain.repository.CashRepository
+import com.daftar.app.domain.repository.LedgerRefreshRepository
 import com.daftar.app.domain.repository.RatesRepository
 import com.daftar.app.domain.repository.SettingsRepository
 import com.daftar.app.domain.usecase.ActivityFeedBuilder
@@ -22,7 +23,6 @@ import com.daftar.app.ui.common.ToastIcon
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlin.math.abs
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
@@ -67,6 +67,7 @@ class HomeViewModel @Inject constructor(
     initialSetupStatus: InitialSetupStatus,
     private val converter: CurrencyConverter,
     private val timeProvider: TimeProvider,
+    private val ledgerRefresh: LedgerRefreshRepository,
     private val toastCenter: ToastCenter,
 ) : ViewModel() {
 
@@ -86,9 +87,12 @@ class HomeViewModel @Inject constructor(
         if (syncing.value) return
         viewModelScope.launch {
             syncing.value = true
-            delay(1100)
+            val result = runCatching { ledgerRefresh.refresh() }
             syncing.value = false
-            toastCenter.show("Ledger synced", ToastIcon.CHECK)
+            toastCenter.show(
+                if (result.isSuccess) "Ledger synced" else result.exceptionOrNull()?.message ?: "Unable to sync ledger",
+                if (result.isSuccess) ToastIcon.REFRESH else ToastIcon.CROSS,
+            )
         }
     }
 

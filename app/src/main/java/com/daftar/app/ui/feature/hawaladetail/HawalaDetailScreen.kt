@@ -142,8 +142,11 @@ class HawalaDetailViewModel @Inject constructor(
 
     fun markPaid() {
         viewModelScope.launch {
-            markHawalaPaid(hawalaId)
-            toastCenter.show("Hawala marked paid out", ToastIcon.CHECK)
+            val result = runCatching { markHawalaPaid(hawalaId) }
+            toastCenter.show(
+                if (result.isSuccess) "Hawala marked paid out" else result.exceptionOrNull()?.message ?: "Unable to update hawala",
+                if (result.isSuccess) ToastIcon.CHECK else ToastIcon.CROSS,
+            )
         }
     }
 
@@ -152,7 +155,11 @@ class HawalaDetailViewModel @Inject constructor(
     fun dismissCancel() { dialog.value = dialog.value.copy(cancelConfirmOpen = false) }
     fun confirmCancel(onCancelled: () -> Unit) {
         viewModelScope.launch {
-            cancelHawala(hawalaId)
+            val result = runCatching { cancelHawala(hawalaId) }
+            if (result.isFailure) {
+                toastCenter.show(result.exceptionOrNull()?.message ?: "Unable to cancel hawala", ToastIcon.CROSS)
+                return@launch
+            }
             dialog.value = dialog.value.copy(cancelConfirmOpen = false)
             toastCenter.show("Hawala cancelled", ToastIcon.CROSS)
             onCancelled()
@@ -187,7 +194,13 @@ class HawalaDetailViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
-            payOutHawala(hawalaId, if (p.method == PayoutMethod.ACCOUNT) p.customerId else null)
+            val result = runCatching {
+                payOutHawala(hawalaId, if (p.method == PayoutMethod.ACCOUNT) p.customerId else null)
+            }
+            if (result.isFailure) {
+                toastCenter.show(result.exceptionOrNull()?.message ?: "Unable to pay out hawala", ToastIcon.CROSS)
+                return@launch
+            }
             dialog.value = dialog.value.copy(payout = null)
             toastCenter.show("Hawala paid out", ToastIcon.CHECK)
             onDone()

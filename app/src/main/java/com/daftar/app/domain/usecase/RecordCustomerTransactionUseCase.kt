@@ -6,6 +6,7 @@ import com.daftar.app.domain.model.CurrencyConversion
 import com.daftar.app.domain.model.CustomerTransaction
 import com.daftar.app.domain.model.CustomerTxType
 import com.daftar.app.domain.repository.CustomerRepository
+import com.daftar.app.domain.repository.LedgerMutationRepository
 import javax.inject.Inject
 
 data class CustomerTxDraft(
@@ -24,12 +25,14 @@ data class CustomerTxDraft(
 
 sealed interface RecordCustomerTxResult {
     data class Recorded(val tx: CustomerTransaction, val customerName: String) : RecordCustomerTxResult
+    data class Failure(val message: String) : RecordCustomerTxResult
     enum class Error : RecordCustomerTxResult { MISSING_CUSTOMER, INVALID_AMOUNT, INVALID_RATE }
 }
 
 /** Books a customer account entry, optionally converting across currencies at a manual rate. */
 class RecordCustomerTransactionUseCase @Inject constructor(
     private val customerRepository: CustomerRepository,
+    private val mutations: LedgerMutationRepository,
     private val timeProvider: TimeProvider,
 ) {
     suspend operator fun invoke(draft: CustomerTxDraft): RecordCustomerTxResult {
@@ -79,7 +82,11 @@ class RecordCustomerTransactionUseCase @Inject constructor(
             } else null,
             photoUris = draft.photoUris,
         )
-        customerRepository.addTransaction(customerId, tx)
-        return RecordCustomerTxResult.Recorded(tx, customer.name)
+        val created = try {
+            mutations.createCustomerTransaction(customerId, tx)
+        } catch (error: Exception) {
+            return RecordCustomerTxResult.Failure(error.message ?: "Unable to record entry")
+        }
+        return RecordCustomerTxResult.Recorded(created, customer.name)
     }
 }

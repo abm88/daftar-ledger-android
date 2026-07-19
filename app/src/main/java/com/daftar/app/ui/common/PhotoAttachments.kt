@@ -26,8 +26,11 @@ import androidx.compose.material.icons.rounded.Photo
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -77,8 +80,9 @@ private fun loadBitmap(context: Context, uri: String, maxDim: Int): ImageBitmap?
 @Composable
 fun rememberImageBitmap(uri: String, maxDim: Int = 0): ImageBitmap? {
     val context = LocalContext.current
-    val bitmap by produceState<ImageBitmap?>(initialValue = null, uri, maxDim) {
-        value = withContext(Dispatchers.IO) { loadBitmap(context, uri, maxDim) }
+    var bitmap by remember(uri, maxDim) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(uri, maxDim) {
+        bitmap = withContext(Dispatchers.IO) { loadBitmap(context, uri, maxDim) }
     }
     return bitmap
 }

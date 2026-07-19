@@ -57,6 +57,7 @@ import com.daftar.app.domain.model.AssetCatalog
 import com.daftar.app.domain.model.Expense
 import com.daftar.app.domain.model.TeamMember
 import com.daftar.app.domain.repository.RatesRepository
+import com.daftar.app.domain.repository.LedgerMutationRepository
 import com.daftar.app.domain.repository.SettingsRepository
 import com.daftar.app.domain.repository.TeamRepository
 import com.daftar.app.domain.usecase.CurrencyConverter
@@ -105,6 +106,7 @@ data class TeamUiState(
 @HiltViewModel
 class TeamViewModel @Inject constructor(
     private val teamRepository: TeamRepository,
+    private val mutations: LedgerMutationRepository,
     ratesRepository: RatesRepository,
     settingsRepository: SettingsRepository,
     private val converter: CurrencyConverter,
@@ -139,15 +141,18 @@ class TeamViewModel @Inject constructor(
         if (trimmed.isEmpty()) return
         viewModelScope.launch {
             val now = timeProvider.nowMillis()
-            teamRepository.addMember(
-                TeamMember(
-                    id = "tm_$now",
-                    name = trimmed,
-                    role = role,
-                    phone = phone.trim().ifEmpty { null },
-                ),
-            )
-            toastCenter.show("Member added · $trimmed", ToastIcon.PERSON_ADD)
+            val result = runCatching {
+                mutations.createTeamMember(
+                    TeamMember(
+                        id = "tm_$now",
+                        name = trimmed,
+                        role = role,
+                        phone = phone.trim().ifEmpty { null },
+                    ),
+                )
+            }
+            if (result.isSuccess) toastCenter.show("Member added · $trimmed", ToastIcon.PERSON_ADD)
+            else toastCenter.show(result.exceptionOrNull()?.message ?: "Unable to add member", ToastIcon.CROSS)
         }
     }
 }

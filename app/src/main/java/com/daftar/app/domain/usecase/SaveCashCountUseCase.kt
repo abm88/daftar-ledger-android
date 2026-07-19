@@ -1,8 +1,6 @@
 package com.daftar.app.domain.usecase
 
-import com.daftar.app.core.format.Formatters
-import com.daftar.app.core.time.TimeProvider
-import com.daftar.app.domain.repository.CashRepository
+import com.daftar.app.domain.repository.LedgerMutationRepository
 import javax.inject.Inject
 
 /**
@@ -10,13 +8,11 @@ import javax.inject.Inject
  * overwritten — blanks mean "not counted this time".
  */
 class SaveCashCountUseCase @Inject constructor(
-    private val cashRepository: CashRepository,
-    private val timeProvider: TimeProvider,
+    private val mutations: LedgerMutationRepository,
 ) {
     suspend operator fun invoke(countedAmounts: Map<String, Double>): Boolean {
         val valid = countedAmounts.filterValues { it >= 0.0 }
         if (valid.isEmpty()) return false
-        cashRepository.setBalances(valid, Formatters.nowLabel(timeProvider.nowMillis()))
-        return true
+        return runCatching { mutations.recordCashCount(valid) }.isSuccess
     }
 }

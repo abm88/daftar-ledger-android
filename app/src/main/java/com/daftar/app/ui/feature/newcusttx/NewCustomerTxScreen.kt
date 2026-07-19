@@ -279,9 +279,9 @@ class NewCustomerTxViewModel @Inject constructor(
                 }
                 toastCenter.show(message, ToastIcon.CHECK)
                 onSaved()
-            } else {
-                toastCenter.show("Check the form and try again", ToastIcon.CROSS)
-            }
+            } else if (result is RecordCustomerTxResult.Failure) {
+                toastCenter.show(result.message, ToastIcon.CROSS)
+            } else toastCenter.show("Check the form and try again", ToastIcon.CROSS)
         }
     }
 }

@@ -37,6 +37,7 @@ import com.daftar.app.domain.model.Asset
 import com.daftar.app.domain.model.AssetCatalog
 import com.daftar.app.domain.model.AssetType
 import com.daftar.app.domain.repository.SettingsRepository
+import com.daftar.app.domain.repository.LedgerMutationRepository
 import com.daftar.app.domain.model.LedgerSettings
 import com.daftar.app.ui.common.MonoLabel
 import com.daftar.app.ui.common.ToastCenter
@@ -55,6 +56,7 @@ import kotlinx.coroutines.launch
 @HiltViewModel
 class AssetManagementViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
+    private val mutations: LedgerMutationRepository,
     private val toastCenter: ToastCenter,
 ) : ViewModel() {
 
@@ -62,19 +64,21 @@ class AssetManagementViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), LedgerSettings())
 
     fun toggle(asset: Asset) {
-        if (asset.isDefault) return
+        if (asset.isBase) return
         viewModelScope.launch {
             val wasActive = settings.value.isAssetActive(asset)
-            settingsRepository.setAssetActive(asset.code, !wasActive)
-            toastCenter.show(
-                if (wasActive) "${asset.code} deactivated" else "${asset.code} activated · ${asset.name}",
-                if (wasActive) ToastIcon.MINUS else ToastIcon.CHECK,
-            )
+            val result = runCatching { mutations.setAssetActive(asset.code, !wasActive) }
+            if (result.isSuccess) {
+                toastCenter.show(
+                    if (wasActive) "${asset.code} deactivated" else "${asset.code} activated · ${asset.name}",
+                    if (wasActive) ToastIcon.MINUS else ToastIcon.CHECK,
+                )
+            } else toastCenter.show(result.exceptionOrNull()?.message ?: "Unable to update asset", ToastIcon.CROSS)
         }
     }
 }
 
-/** Toggle which currencies and metals the shop tracks; defaults are locked on. */
+/** Toggle which currencies and metals the shop tracks; only base AFN is locked on. */
 @Composable
 fun AssetManagementScreen(
     navController: NavController,
@@ -105,7 +109,7 @@ fun AssetManagementScreen(
                 Text(
                     "Toggle on the currencies and metals your daftar deals in. Active assets appear " +
                         "on your Cash card, in the FX form, and in customer transactions. " +
-                        "USD, AFN, and PKR are always on.",
+                        "AFN is the base currency and always stays on.",
                     style = TextStyle(fontFamily = Inter, fontSize = 11.sp, color = DaftarColors.CopperDeep),
                 )
             }
@@ -129,9 +133,9 @@ fun AssetManagementScreen(
 
 @Composable
 private fun AssetToggleRow(asset: Asset, active: Boolean, onToggle: () -> Unit) {
-    // v18 visually mutes locked default rows: paper-deep surface, 85% opacity,
+    // The backend only locks the base asset (AFN); USD and PKR are suggestions.
     // and a washed-out toggle — signalling they can't be turned off.
-    val locked = asset.isDefault
+    val locked = asset.isBase
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -149,7 +153,7 @@ private fun AssetToggleRow(asset: Asset, active: Boolean, onToggle: () -> Unit) 
                 if (active && !locked) DaftarColors.LineStrong else DaftarColors.Line,
                 RoundedCornerShape(12.dp),
             )
-            .clickable(enabled = !asset.isDefault, onClick = onToggle)
+            .clickable(enabled = !asset.isBase, onClick = onToggle)
             .padding(horizontal = 14.dp, vertical = 12.dp)
             .then(if (locked) Modifier.alpha(0.85f) else Modifier),
         verticalAlignment = Alignment.CenterVertically,

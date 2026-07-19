@@ -135,9 +135,12 @@ class UpdateRatesViewModel @Inject constructor(
                 if (buy <= 0 || sell <= 0) return@mapNotNull null
                 code to (buy to sell)
             }.toMap()
-            updateRates(quotes)
-            toastCenter.show("Rates updated", ToastIcon.SCALE)
-            onSaved()
+            if (updateRates(quotes)) {
+                toastCenter.show("Rates updated", ToastIcon.SCALE)
+                onSaved()
+            } else {
+                toastCenter.show("Unable to update rates", ToastIcon.CROSS)
+            }
         }
     }
 }

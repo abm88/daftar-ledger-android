@@ -39,6 +39,7 @@ import androidx.navigation.NavController
 import com.daftar.app.domain.model.Asset
 import com.daftar.app.domain.model.LedgerSettings
 import com.daftar.app.domain.repository.SettingsRepository
+import com.daftar.app.domain.repository.LedgerMutationRepository
 import com.daftar.app.ui.common.MonoLabel
 import com.daftar.app.ui.common.ToastCenter
 import com.daftar.app.ui.common.ToastIcon
@@ -55,6 +56,7 @@ import kotlinx.coroutines.launch
 @HiltViewModel
 class DefaultsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
+    private val mutations: LedgerMutationRepository,
     private val toastCenter: ToastCenter,
 ) : ViewModel() {
 
@@ -63,15 +65,21 @@ class DefaultsViewModel @Inject constructor(
 
     fun setReporting(code: String) {
         viewModelScope.launch {
-            settingsRepository.setReportingCurrency(code)
-            toastCenter.show("Reporting currency: $code", ToastIcon.CHECK)
+            val result = runCatching { mutations.updateSettings(reportingCurrency = code) }
+            toastCenter.show(
+                if (result.isSuccess) "Reporting currency: $code" else result.exceptionOrNull()?.message ?: "Unable to update settings",
+                if (result.isSuccess) ToastIcon.CHECK else ToastIcon.CROSS,
+            )
         }
     }
 
     fun setTrade(code: String) {
         viewModelScope.launch {
-            settingsRepository.setTradeCurrency(code)
-            toastCenter.show("Trade default: $code", ToastIcon.CHECK)
+            val result = runCatching { mutations.updateSettings(tradeCurrency = code) }
+            toastCenter.show(
+                if (result.isSuccess) "Trade default: $code" else result.exceptionOrNull()?.message ?: "Unable to update settings",
+                if (result.isSuccess) ToastIcon.CHECK else ToastIcon.CROSS,
+            )
         }
     }
 }

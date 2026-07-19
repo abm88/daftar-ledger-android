@@ -71,7 +71,8 @@ data class NewHawalaUiState(
     val amount: Double get() = form.amountText.toDoubleOrNull() ?: 0.0
     val totalDebit: Double get() = amount + commissionAmount
     val balanceAfter: Double get() = senderBalance - totalDebit
-    val insufficientAccountFunds: Boolean
+    /** Account-funded sends may create/extend an advance; this is informative, not blocking. */
+    val accountWillBeNegative: Boolean
         get() = form.senderMode == SenderMode.ACCOUNT && senderCustomer != null &&
             amount > 0 && balanceAfter < -0.5
 }
@@ -248,8 +249,6 @@ class NewHawalaViewModel @Inject constructor(
             }
             form.senderMode == SenderMode.ACCOUNT && form.senderCustomerId == null ->
                 toastCenter.show("Choose sender account", ToastIcon.CROSS)
-            form.senderMode == SenderMode.ACCOUNT && state.insufficientAccountFunds ->
-                toastCenter.show("Insufficient ${form.currency} balance", ToastIcon.CROSS)
             form.senderMode == SenderMode.CASH && form.senderName.isBlank() ->
                 toastCenter.show("Enter sender name", ToastIcon.CROSS)
             else -> update { it.copy(confirming = true) }
@@ -286,8 +285,8 @@ class NewHawalaViewModel @Inject constructor(
                     toastCenter.show(message, ToastIcon.CHECK)
                     onIssued(result.hawalaId)
                 }
-                IssueHawalaResult.Error.INSUFFICIENT_BALANCE ->
-                    toastCenter.show("Insufficient ${form.currency} balance", ToastIcon.CROSS)
+                is IssueHawalaResult.Failure ->
+                    toastCenter.show(result.message, ToastIcon.CROSS)
                 else -> toastCenter.show("Check the form and try again", ToastIcon.CROSS)
             }
         }

@@ -45,6 +45,7 @@ import com.daftar.app.domain.model.Counterparty
 import com.daftar.app.domain.model.MoneyByCurrency
 import com.daftar.app.domain.model.PartnerTier
 import com.daftar.app.domain.repository.PartnerRepository
+import com.daftar.app.domain.repository.LedgerRefreshRepository
 import com.daftar.app.domain.usecase.AddPartnerUseCase
 import com.daftar.app.domain.usecase.NewPartnerDraft
 import com.daftar.app.domain.usecase.PositionCalculator
@@ -69,7 +70,6 @@ import com.daftar.app.ui.theme.Inter
 import com.daftar.app.ui.theme.NotoNaskhArabic
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
@@ -91,6 +91,7 @@ class BranchesViewModel @Inject constructor(
     partnerRepository: PartnerRepository,
     private val positionCalculator: PositionCalculator,
     private val addPartnerUseCase: AddPartnerUseCase,
+    private val ledgerRefresh: LedgerRefreshRepository,
     private val toastCenter: ToastCenter,
 ) : ViewModel() {
 
@@ -115,14 +116,16 @@ class BranchesViewModel @Inject constructor(
 
     fun setSearch(value: String) { search.value = value }
 
-    // TODO(backend): replace the simulated delay with a real ledger-sync call.
     fun sync() {
         if (syncing.value) return
         viewModelScope.launch {
             syncing.value = true
-            delay(1100)
+            val result = runCatching { ledgerRefresh.refresh() }
             syncing.value = false
-            toastCenter.show("Ledger synced", ToastIcon.REFRESH)
+            toastCenter.show(
+                if (result.isSuccess) "Ledger synced" else result.exceptionOrNull()?.message ?: "Unable to sync ledger",
+                if (result.isSuccess) ToastIcon.REFRESH else ToastIcon.CROSS,
+            )
         }
     }
 

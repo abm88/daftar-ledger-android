@@ -4,7 +4,7 @@ import com.daftar.app.domain.model.Counterparty
 import com.daftar.app.domain.model.Hawala
 import kotlinx.coroutines.flow.StateFlow
 
-/** Counterparty sarafs and their hawala ledgers. Backed in-memory for now; API later. */
+/** Observable counterparty and hawala read model, hydrated from the API. */
 interface PartnerRepository {
     val partners: StateFlow<List<Counterparty>>
 

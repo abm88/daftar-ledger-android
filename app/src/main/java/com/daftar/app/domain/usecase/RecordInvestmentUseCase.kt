@@ -4,8 +4,7 @@ import com.daftar.app.core.format.Formatters
 import com.daftar.app.core.time.TimeProvider
 import com.daftar.app.domain.model.Investment
 import com.daftar.app.domain.model.InvestmentType
-import com.daftar.app.domain.repository.CashRepository
-import com.daftar.app.domain.repository.InvestmentRepository
+import com.daftar.app.domain.repository.LedgerMutationRepository
 import javax.inject.Inject
 
 /**
@@ -13,8 +12,7 @@ import javax.inject.Inject
  * drawer at the same time, so the cash counter moves with it.
  */
 class RecordInvestmentUseCase @Inject constructor(
-    private val investmentRepository: InvestmentRepository,
-    private val cashRepository: CashRepository,
+    private val mutations: LedgerMutationRepository,
     private val timeProvider: TimeProvider,
 ) {
     suspend operator fun invoke(
@@ -34,8 +32,6 @@ class RecordInvestmentUseCase @Inject constructor(
             type = type,
             note = note.trim().ifEmpty { null },
         )
-        investmentRepository.addInvestment(investment)
-        cashRepository.adjustBalance(assetCode, investment.signedAmount)
-        return investment
+        return runCatching { mutations.createInvestment(investment) }.getOrNull()
     }
 }

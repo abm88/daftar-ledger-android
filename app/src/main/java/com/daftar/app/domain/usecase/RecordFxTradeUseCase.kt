@@ -6,6 +6,7 @@ import com.daftar.app.domain.model.FxSide
 import com.daftar.app.domain.model.FxTrade
 import com.daftar.app.domain.repository.CashRepository
 import com.daftar.app.domain.repository.FxRepository
+import com.daftar.app.domain.repository.LedgerMutationRepository
 import com.daftar.app.domain.repository.RatesRepository
 import javax.inject.Inject
 
@@ -19,6 +20,7 @@ data class FxTradeDraft(
 
 sealed interface RecordFxResult {
     data class Recorded(val trade: FxTrade) : RecordFxResult
+    data class Failure(val message: String) : RecordFxResult
     enum class Error : RecordFxResult { INVALID_AMOUNT, INVALID_RATE, SAME_CURRENCY, INSUFFICIENT_CASH }
 }
 
@@ -31,6 +33,7 @@ class RecordFxTradeUseCase @Inject constructor(
     private val fxRepository: FxRepository,
     private val cashRepository: CashRepository,
     private val ratesRepository: RatesRepository,
+    private val mutations: LedgerMutationRepository,
     private val fxAnalytics: FxAnalytics,
     private val currencyConverter: CurrencyConverter,
     private val timeProvider: TimeProvider,
@@ -73,9 +76,6 @@ class RecordFxTradeUseCase @Inject constructor(
             proceedsAfn - costPerUnit * draft.fromAmount
         } else null
 
-        cashRepository.adjustBalance(draft.fromCurrency, -draft.fromAmount)
-        cashRepository.adjustBalance(draft.toCurrency, toAmount)
-
         val now = timeProvider.nowMillis()
         val trade = FxTrade(
             id = "fx_$now",
@@ -90,7 +90,10 @@ class RecordFxTradeUseCase @Inject constructor(
             dateLabel = Formatters.nowLabel(now),
             note = draft.note.trim().ifEmpty { null },
         )
-        fxRepository.addTrade(trade)
-        return RecordFxResult.Recorded(trade)
+        return try {
+            RecordFxResult.Recorded(mutations.createFxTrade(trade))
+        } catch (error: Exception) {
+            RecordFxResult.Failure(error.message ?: "Unable to record trade")
+        }
     }
 }

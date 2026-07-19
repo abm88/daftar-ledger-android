@@ -539,20 +539,20 @@ private fun CommissionBlock(state: NewHawalaUiState, viewModel: NewHawalaViewMod
 
 @Composable
 private fun BalanceImpactCard(state: NewHawalaUiState) {
-    val insufficient = state.insufficientAccountFunds
+    val createsAdvance = state.accountWillBeNegative
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(if (insufficient) DaftarColors.Red.copy(alpha = 0.06f) else DaftarColors.Ink)
+            .background(if (createsAdvance) DaftarColors.Red.copy(alpha = 0.06f) else DaftarColors.Ink)
             .then(
-                if (insufficient) Modifier.dashedBorder(DaftarColors.Red, 1.5.dp, 14.dp) else Modifier,
+                if (createsAdvance) Modifier.dashedBorder(DaftarColors.Red, 1.5.dp, 14.dp) else Modifier,
             )
             .padding(14.dp),
     ) {
         MonoLabel(
             "Balance impact · ${state.form.currency}",
-            color = if (insufficient) DaftarColors.Red else DaftarColors.GoldSoft,
+            color = if (createsAdvance) DaftarColors.Red else DaftarColors.GoldSoft,
             fontSize = 9,
         )
         Spacer(Modifier.height(8.dp))
@@ -561,7 +561,7 @@ private fun BalanceImpactCard(state: NewHawalaUiState) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                MonoLabel("Now", color = if (insufficient) DaftarColors.Muted else DaftarColors.MutedLight, fontSize = 9, letterSpacing = 0.1)
+                MonoLabel("Now", color = if (createsAdvance) DaftarColors.Muted else DaftarColors.MutedLight, fontSize = 9, letterSpacing = 0.1)
                 Text(
                     text = Formatters.signPrefix(state.senderBalance).ifEmpty { "+" } +
                         Formatters.number(abs(state.senderBalance)),
@@ -570,7 +570,7 @@ private fun BalanceImpactCard(state: NewHawalaUiState) {
                         color = when {
                             state.senderBalance > 0 -> DaftarColors.LongGreen
                             state.senderBalance < 0 -> DaftarColors.ShortRed
-                            insufficient -> DaftarColors.Ink
+                            createsAdvance -> DaftarColors.Ink
                             else -> DaftarColors.MutedLight
                         },
                     ),
@@ -578,11 +578,11 @@ private fun BalanceImpactCard(state: NewHawalaUiState) {
             }
             Icon(
                 Icons.AutoMirrored.Rounded.ArrowForward, null,
-                tint = (if (insufficient) DaftarColors.Muted else DaftarColors.GoldSoft).copy(alpha = 0.6f),
+                tint = (if (createsAdvance) DaftarColors.Muted else DaftarColors.GoldSoft).copy(alpha = 0.6f),
                 modifier = Modifier.size(16.dp),
             )
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
-                MonoLabel("After", color = if (insufficient) DaftarColors.Muted else DaftarColors.MutedLight, fontSize = 9, letterSpacing = 0.1)
+                MonoLabel("After", color = if (createsAdvance) DaftarColors.Muted else DaftarColors.MutedLight, fontSize = 9, letterSpacing = 0.1)
                 Text(
                     text = Formatters.signPrefix(state.balanceAfter).ifEmpty { "+" } +
                         Formatters.number(abs(state.balanceAfter)),
@@ -590,7 +590,7 @@ private fun BalanceImpactCard(state: NewHawalaUiState) {
                         fontFamily = Fraunces, fontWeight = FontWeight.Medium, fontSize = 18.sp,
                         color = when {
                             state.balanceAfter > 0 -> DaftarColors.LongGreen
-                            state.balanceAfter < 0 && insufficient -> DaftarColors.Red
+                            state.balanceAfter < 0 && createsAdvance -> DaftarColors.Red
                             state.balanceAfter < 0 -> DaftarColors.ShortRed
                             else -> DaftarColors.MutedLight
                         },
@@ -600,7 +600,7 @@ private fun BalanceImpactCard(state: NewHawalaUiState) {
         }
         Spacer(Modifier.height(10.dp))
         HorizontalDivider(
-            color = if (insufficient) DaftarColors.Red.copy(alpha = 0.25f) else DaftarColors.GoldSoft.copy(alpha = 0.18f),
+            color = if (createsAdvance) DaftarColors.Red.copy(alpha = 0.25f) else DaftarColors.GoldSoft.copy(alpha = 0.18f),
         )
         Spacer(Modifier.height(8.dp))
         Row(
@@ -616,15 +616,15 @@ private fun BalanceImpactCard(state: NewHawalaUiState) {
                     },
                 style = TextStyle(
                     fontFamily = JetBrainsMono, fontSize = 10.sp,
-                    color = if (insufficient) DaftarColors.Red else DaftarColors.GoldSoft,
+                    color = if (createsAdvance) DaftarColors.Red else DaftarColors.GoldSoft,
                 ),
             )
             Text(
-                text = if (insufficient) "⚠ INSUFFICIENT"
+                text = if (createsAdvance) "ADVANCE CREATED"
                 else "TOTAL " + Formatters.amount(state.totalDebit, state.form.currency),
                 style = TextStyle(
                     fontFamily = JetBrainsMono, fontWeight = FontWeight.Bold, fontSize = 10.sp,
-                    color = if (insufficient) DaftarColors.Red else DaftarColors.GoldSoft,
+                    color = if (createsAdvance) DaftarColors.Red else DaftarColors.GoldSoft,
                 ),
             )
         }

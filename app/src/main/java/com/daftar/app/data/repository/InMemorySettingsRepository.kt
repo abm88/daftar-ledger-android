@@ -38,4 +38,8 @@ class InMemorySettingsRepository @Inject constructor() : SettingsRepository {
     override suspend fun replaceSettings(settings: LedgerSettings) {
         state.value = settings
     }
+
+    override suspend fun replaceShopProfile(profile: ShopProfile) {
+        this.profile.value = profile
+    }
 }
