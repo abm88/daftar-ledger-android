@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -130,20 +132,12 @@ fun NewHawalaScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 18.dp),
         ) {
-            // Sender mode
-            MonoLabel("How is sender paying?", fontSize = 9)
-            Spacer(Modifier.height(8.dp))
-            SegmentedSwitcher {
-                SegmentButton(form.senderMode == SenderMode.CASH, { viewModel.setSenderMode(SenderMode.CASH) }) {
-                    SenderModeLabel(Icons.Rounded.BusinessCenter, "Cash", "Walk-in", form.senderMode == SenderMode.CASH)
-                }
-                SegmentButton(form.senderMode == SenderMode.ACCOUNT, { viewModel.setSenderMode(SenderMode.ACCOUNT) }) {
-                    SenderModeLabel(Icons.Rounded.Person, "Account", "From holder", form.senderMode == SenderMode.ACCOUNT)
-                }
-            }
-
-            Spacer(Modifier.height(14.dp))
-            CurrencySwitcher(form.currency, { cur -> viewModel.update { it.copy(currency = cur) } })
+            // v20: currency as a scrollable pill row (same as You Received / You Gave).
+            CurrencyPillRow(
+                currencies = state.activeCurrencies,
+                selected = form.currency,
+                onSelect = { cur -> viewModel.update { it.copy(currency = cur) } },
+            )
 
             Spacer(Modifier.height(14.dp))
             BigAmountInput(
@@ -154,73 +148,79 @@ fun NewHawalaScreen(
             )
 
             Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                CityField("From", form.fromCity, Modifier.weight(1f)) {
-                    viewModel.update { it.copy(picker = HawalaPicker.FROM_CITY) }
+            CommissionBlock(state, viewModel)
+
+            Spacer(Modifier.height(12.dp))
+            // v20 unified sender: a walk-in name input with an "Or select account"
+            // CTA. Selecting an account swaps in its card + balance-impact preview
+            // and a × to clear back to walk-in entry.
+            if (state.senderCustomer != null) {
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(DaftarColors.Green.copy(alpha = 0.05f))
+                            .border(1.dp, DaftarColors.Green, RoundedCornerShape(12.dp))
+                            .clickable { viewModel.update { it.copy(picker = HawalaPicker.SENDER_ACCOUNT) } }
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        CustomerBadge(state.senderCustomer!!, 38.dp)
+                        Column(modifier = Modifier.weight(1f)) {
+                            MonoLabel("Sender account · د لیږونکي حساب", color = DaftarColors.Green, fontSize = 9)
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = state.senderCustomer!!.name,
+                                style = TextStyle(fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = DaftarColors.Ink),
+                            )
+                        }
+                    }
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(6.dp)
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .background(DaftarColors.Ink)
+                            .clickable { viewModel.clearSenderCustomer() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Rounded.Close, null, tint = DaftarColors.Paper, modifier = Modifier.size(13.dp))
+                    }
                 }
-                CityField("To", form.toCity, Modifier.weight(1f)) {
-                    viewModel.update { it.copy(picker = HawalaPicker.TO_CITY) }
+                if (state.amount > 0) {
+                    Spacer(Modifier.height(12.dp))
+                    BalanceImpactCard(state)
+                }
+            } else {
+                FieldBox("Sender · لیږونکی", modifier = Modifier.fillMaxWidth()) {
+                    FieldTextInput(form.senderName, { text -> viewModel.update { it.copy(senderName = text) } }, "Sender full name (walk-in)")
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .dashedBorder(DaftarColors.LineDashed, 1.5.dp, 12.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { viewModel.update { it.copy(picker = HawalaPicker.SENDER_ACCOUNT) } }
+                        .padding(vertical = 12.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Rounded.Person, null, tint = DaftarColors.InkSoft, modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "Or select account · حساب وټاکئ",
+                        style = TextStyle(fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = DaftarColors.InkSoft),
+                    )
                 }
             }
 
             Spacer(Modifier.height(12.dp))
-            CommissionBlock(state, viewModel)
-
-            Spacer(Modifier.height(12.dp))
-            if (form.senderMode == SenderMode.CASH) {
-                FieldBox("Sender · لیږونکی", modifier = Modifier.fillMaxWidth()) {
-                    FieldTextInput(form.senderName, { text -> viewModel.update { it.copy(senderName = text) } }, "Sender full name")
-                }
-                Spacer(Modifier.height(10.dp))
-                FieldBox("Receiver · ترلاسه کوونکی", modifier = Modifier.fillMaxWidth()) {
-                    FieldTextInput(form.receiverName, { text -> viewModel.update { it.copy(receiverName = text) } }, "Receiver full name")
-                }
-            } else {
-                // Sender account picker
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(DaftarColors.Green.copy(alpha = 0.05f))
-                        .border(1.dp, DaftarColors.Green, RoundedCornerShape(12.dp))
-                        .clickable { viewModel.update { it.copy(picker = HawalaPicker.SENDER_ACCOUNT) } }
-                        .padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    if (state.senderCustomer != null) {
-                        CustomerBadge(state.senderCustomer!!, 38.dp)
-                    } else {
-                        Icon(Icons.Rounded.Person, null, tint = DaftarColors.Green, modifier = Modifier.size(18.dp))
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        MonoLabel("Sender account · د لیږونکي حساب", color = DaftarColors.Green, fontSize = 9)
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            text = state.senderCustomer?.name ?: "Choose account",
-                            style = TextStyle(
-                                fontFamily = Inter,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 14.sp,
-                                color = if (state.senderCustomer != null) DaftarColors.Ink else DaftarColors.Muted,
-                            ),
-                        )
-                    }
-                    Icon(
-                        Icons.AutoMirrored.Rounded.KeyboardArrowRight, null,
-                        tint = DaftarColors.Muted, modifier = Modifier.size(16.dp),
-                    )
-                }
-
-                if (state.senderCustomer != null && state.amount > 0) {
-                    Spacer(Modifier.height(12.dp))
-                    BalanceImpactCard(state)
-                }
-
-                Spacer(Modifier.height(12.dp))
-                FieldBox("Receiver · ترلاسه کوونکی", modifier = Modifier.fillMaxWidth()) {
-                    FieldTextInput(form.receiverName, { text -> viewModel.update { it.copy(receiverName = text) } }, "Receiver full name")
-                }
+            FieldBox("Receiver · ترلاسه کوونکی", modifier = Modifier.fillMaxWidth()) {
+                FieldTextInput(form.receiverName, { text -> viewModel.update { it.copy(receiverName = text) } }, "Receiver full name")
             }
 
             Spacer(Modifier.height(12.dp))
@@ -299,17 +299,6 @@ fun NewHawalaScreen(
 
     // ---- Pickers & confirm sheet ----
     when (form.picker) {
-        HawalaPicker.FROM_CITY, HawalaPicker.TO_CITY -> CityPickerSheet(
-            title = if (form.picker == HawalaPicker.FROM_CITY) "From city" else "To city",
-            selected = if (form.picker == HawalaPicker.FROM_CITY) form.fromCity else form.toCity,
-            onDismiss = { viewModel.update { it.copy(picker = HawalaPicker.NONE) } },
-            onPick = { city ->
-                viewModel.update {
-                    if (it.picker == HawalaPicker.FROM_CITY) it.copy(fromCity = city, picker = HawalaPicker.NONE)
-                    else it.copy(toCity = city, picker = HawalaPicker.NONE)
-                }
-            },
-        )
         HawalaPicker.PARTNER -> PartnerPickerSheet(
             state = state,
             onDismiss = { viewModel.update { it.copy(picker = HawalaPicker.NONE) } },
@@ -358,63 +347,36 @@ fun NewHawalaScreen(
     }
 }
 
+/** Scrollable currency pill row shared with the You Received / You Gave forms. */
 @Composable
-private fun SenderModeLabel(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, sub: String, selected: Boolean) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = if (selected) DaftarColors.Paper else DaftarColors.Muted,
-            modifier = Modifier.size(14.dp),
-        )
-        Column {
-            Text(
-                text = label.uppercase(),
-                style = TextStyle(
-                    fontFamily = JetBrainsMono,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp,
-                    letterSpacing = 0.05.em,
-                    color = if (selected) DaftarColors.Paper else DaftarColors.Muted,
-                ),
-            )
-            Text(
-                text = sub,
-                style = TextStyle(
-                    fontFamily = Inter,
-                    fontSize = 8.sp,
-                    color = (if (selected) DaftarColors.Paper else DaftarColors.Muted).copy(alpha = 0.7f),
-                ),
-            )
-        }
-    }
-}
-
-@Composable
-private fun CityField(label: String, city: City, modifier: Modifier, onClick: () -> Unit) {
+private fun CurrencyPillRow(currencies: List<String>, selected: String, onSelect: (String) -> Unit) {
     Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(DaftarColors.PaperSoft)
-            .border(1.dp, DaftarColors.LineStrong, RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Icon(Icons.Rounded.Place, null, tint = DaftarColors.InkSoft, modifier = Modifier.size(16.dp))
-        Column {
-            MonoLabel(label, fontSize = 9)
-            Spacer(Modifier.height(2.dp))
-            Text(
-                text = "${city.displayName} · ${city.code}",
-                style = TextStyle(
-                    fontFamily = Inter,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 13.sp,
-                    color = DaftarColors.Ink,
-                ),
-            )
+        currencies.forEach { code ->
+            val on = selected == code
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(if (on) DaftarColors.Ink else DaftarColors.PaperSoft)
+                    .border(1.dp, if (on) DaftarColors.Ink else DaftarColors.LineStrong, RoundedCornerShape(20.dp))
+                    .clickable { onSelect(code) }
+                    .padding(horizontal = 12.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                Text(
+                    text = AssetCatalog.symbolFor(code),
+                    style = TextStyle(fontFamily = Inter, fontSize = 11.sp, color = if (on) DaftarColors.GoldSoft else DaftarColors.Muted),
+                )
+                Text(
+                    text = code,
+                    style = TextStyle(fontFamily = JetBrainsMono, fontWeight = FontWeight.Bold, fontSize = 11.sp, letterSpacing = 0.05.em, color = if (on) DaftarColors.Paper else DaftarColors.InkSoft),
+                )
+            }
         }
     }
 }
