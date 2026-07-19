@@ -22,7 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Photo
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -113,7 +113,7 @@ fun PhotoAttachmentSection(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.Rounded.Image, null, tint = DaftarColors.InkSoft, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Rounded.Photo, null, tint = DaftarColors.InkSoft, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.size(8.dp))
                     Text(
                         "Add photo · انځور",
@@ -126,27 +126,26 @@ fun PhotoAttachmentSection(
                     style = TextStyle(fontFamily = Inter, fontSize = 12.sp, color = DaftarColors.Muted),
                 )
             }
-            return
-        }
-
-        // Grid — 5 columns; pad short rows with empty cells so squares stay aligned.
-        val showAddTile = editable && uris.size < MAX_TX_PHOTOS
-        val cells: List<String?> = uris + (if (showAddTile) listOf(null) else emptyList())
-        cells.chunked(5).forEach { rowCells ->
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                rowCells.forEach { uri ->
-                    Box(modifier = Modifier.weight(1f).aspectRatio(1f)) {
-                        if (uri == null) {
-                            AddMoreTile(onAdd)
-                        } else {
-                            PhotoThumb(uri, editable, onOpen = { onOpen(uri) }, onRemove = { onRemove(uri) })
+        } else {
+            // Grid — 5 columns; pad short rows with empty cells so squares stay aligned.
+            val showAddTile = editable && uris.size < MAX_TX_PHOTOS
+            val cells: List<String?> = uris + (if (showAddTile) listOf(null) else emptyList())
+            cells.chunked(5).forEach { rowCells ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    rowCells.forEach { uri ->
+                        Box(modifier = Modifier.weight(1f).aspectRatio(1f)) {
+                            if (uri == null) {
+                                AddMoreTile(onAdd)
+                            } else {
+                                PhotoThumb(uri, editable, onOpen = { onOpen(uri) }, onRemove = { onRemove(uri) })
+                            }
                         }
                     }
+                    repeat(5 - rowCells.size) { Spacer(Modifier.weight(1f)) }
                 }
-                repeat(5 - rowCells.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }
@@ -171,7 +170,7 @@ private fun PhotoThumb(uri: String, editable: Boolean, onOpen: () -> Unit, onRem
                 modifier = Modifier.fillMaxSize(),
             )
         } else {
-            Icon(Icons.Rounded.Image, null, tint = DaftarColors.MutedLight, modifier = Modifier.size(18.dp))
+            Icon(Icons.Rounded.Photo, null, tint = DaftarColors.MutedLight, modifier = Modifier.size(18.dp))
         }
         if (editable) {
             Box(
@@ -224,7 +223,7 @@ fun FullScreenPhotoViewer(uri: String, onDismiss: () -> Unit) {
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                 )
             } else {
-                Icon(Icons.Rounded.Image, null, tint = DaftarColors.MutedLight, modifier = Modifier.size(48.dp))
+                Icon(Icons.Rounded.Photo, null, tint = DaftarColors.MutedLight, modifier = Modifier.size(48.dp))
             }
             Box(
                 modifier = Modifier
