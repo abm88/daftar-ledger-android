@@ -31,6 +31,16 @@ object DaftarDestinations {
     const val NEW_FX = "newFx"
     const val FX_LEDGER = "fxLedger"
 
+    /** Expense entry form. optional teamMemberId pre-selects the member (v20 member detail CTA). */
+    const val NEW_EXPENSE = "newExpense?teamMemberId={teamMemberId}"
+    fun newExpense(teamMemberId: String? = null) =
+        if (teamMemberId == null) "newExpense" else "newExpense?teamMemberId=$teamMemberId"
+
+    // v20: Team members moved into the Daftar section (expenses tracked per person).
+    const val TEAM = "team"
+    const val TEAM_MEMBER_DETAIL = "team/{memberId}"
+    fun teamMemberDetail(memberId: String) = "team/$memberId"
+
     const val SETTLE = "settle/{partnerId}"
     fun settle(partnerId: String) = "settle/$partnerId"
 

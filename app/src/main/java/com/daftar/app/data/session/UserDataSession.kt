@@ -13,6 +13,7 @@ import com.daftar.app.domain.repository.InvestmentRepository
 import com.daftar.app.domain.repository.PartnerRepository
 import com.daftar.app.domain.repository.RatesRepository
 import com.daftar.app.domain.repository.SettingsRepository
+import com.daftar.app.domain.repository.TeamRepository
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
@@ -51,6 +52,7 @@ class UserDataSession @Inject constructor(
     private val investmentRepository: InvestmentRepository,
     private val ratesRepository: RatesRepository,
     private val settingsRepository: SettingsRepository,
+    private val teamRepository: TeamRepository,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var autosaveJob: Job? = null
@@ -94,6 +96,8 @@ class UserDataSession @Inject constructor(
                 investmentRepository.investments,
                 ratesRepository.rateBook,
                 settingsRepository.settings,
+                teamRepository.members,
+                teamRepository.expenses,
             )
                 .debounce(AUTOSAVE_DEBOUNCE_MS) // v18 throttles saves at 400 ms after a render
                 .collect { saveNow() }
@@ -113,6 +117,7 @@ class UserDataSession @Inject constructor(
         investmentRepository.replaceAll(snapshot.investments)
         ratesRepository.replaceAll(snapshot.rateBook)
         settingsRepository.replaceSettings(snapshot.settings)
+        teamRepository.replaceAll(snapshot.teamMembers, snapshot.expenses)
     }
 
     private fun currentSnapshot(): UserDataSnapshot = UserDataSnapshot(
@@ -123,6 +128,8 @@ class UserDataSession @Inject constructor(
         investments = investmentRepository.investments.value,
         rateBook = ratesRepository.rateBook.value,
         settings = settingsRepository.settings.value,
+        teamMembers = teamRepository.members.value,
+        expenses = teamRepository.expenses.value,
     )
 
     /**

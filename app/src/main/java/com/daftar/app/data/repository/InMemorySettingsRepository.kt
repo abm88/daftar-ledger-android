@@ -31,6 +31,10 @@ class InMemorySettingsRepository @Inject constructor() : SettingsRepository {
         state.update { it.copy(activeAssetOverrides = it.activeAssetOverrides + (code to active)) }
     }
 
+    override suspend fun setLedgerTableView(tableView: Boolean) {
+        state.update { it.copy(ledgerTableView = tableView) }
+    }
+
     override suspend fun replaceSettings(settings: LedgerSettings) {
         state.value = settings
     }

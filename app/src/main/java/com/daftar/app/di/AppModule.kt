@@ -11,6 +11,7 @@ import com.daftar.app.data.repository.InMemoryInvestmentRepository
 import com.daftar.app.data.repository.InMemoryPartnerRepository
 import com.daftar.app.data.repository.InMemoryRatesRepository
 import com.daftar.app.data.repository.InMemorySettingsRepository
+import com.daftar.app.data.repository.InMemoryTeamRepository
 import com.daftar.app.data.repository.LocalAuthRepository
 import com.daftar.app.data.seed.SeedData
 import com.daftar.app.domain.repository.AuthRepository
@@ -21,6 +22,7 @@ import com.daftar.app.domain.repository.InvestmentRepository
 import com.daftar.app.domain.repository.PartnerRepository
 import com.daftar.app.domain.repository.RatesRepository
 import com.daftar.app.domain.repository.SettingsRepository
+import com.daftar.app.domain.repository.TeamRepository
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -45,6 +47,7 @@ abstract class RepositoryModule {
     @Binds abstract fun cashRepository(impl: InMemoryCashRepository): CashRepository
     @Binds abstract fun ratesRepository(impl: InMemoryRatesRepository): RatesRepository
     @Binds abstract fun settingsRepository(impl: InMemorySettingsRepository): SettingsRepository
+    @Binds abstract fun teamRepository(impl: InMemoryTeamRepository): TeamRepository
     @Binds abstract fun authRepository(impl: LocalAuthRepository): AuthRepository
 }
 

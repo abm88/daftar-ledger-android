@@ -11,6 +11,7 @@ import com.daftar.app.domain.repository.InvestmentRepository
 import com.daftar.app.domain.repository.PartnerRepository
 import com.daftar.app.domain.repository.RatesRepository
 import com.daftar.app.domain.repository.SettingsRepository
+import com.daftar.app.domain.repository.TeamRepository
 import javax.inject.Inject
 
 /**
@@ -28,6 +29,7 @@ class ClearShopDataUseCase @Inject constructor(
     private val investmentRepository: InvestmentRepository,
     private val ratesRepository: RatesRepository,
     private val settingsRepository: SettingsRepository,
+    private val teamRepository: TeamRepository,
     private val seed: SeedData,
 ) {
     suspend operator fun invoke() {
@@ -43,5 +45,6 @@ class ClearShopDataUseCase @Inject constructor(
         investmentRepository.clearAll()
         ratesRepository.replaceAll(seed.rateBook)
         settingsRepository.replaceSettings(LedgerSettings())
+        teamRepository.clearAll()
     }
 }
