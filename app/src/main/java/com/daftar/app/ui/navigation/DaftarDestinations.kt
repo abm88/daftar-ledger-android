@@ -20,6 +20,9 @@ object DaftarDestinations {
     fun newHawala(partnerId: String? = null) =
         if (partnerId == null) "newHawala" else "newHawala?partnerId=$partnerId"
 
+    /** v20 two-phase receive: records an incoming hawala as pending. */
+    const val RECEIVE_HAWALA = "receiveHawala"
+
     /** mode: full | gave | received */
     /** locked pins the entry to the given customer (v18 detail-page quick FABs). */
     const val NEW_CUSTOMER_TX = "newCustomerTx?mode={mode}&customerId={customerId}&locked={locked}"

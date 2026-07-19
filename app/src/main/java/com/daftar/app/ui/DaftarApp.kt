@@ -48,6 +48,7 @@ import com.daftar.app.ui.feature.investments.InvestmentsScreen
 import com.daftar.app.ui.feature.main.MainScreen
 import com.daftar.app.ui.feature.newcusttx.NewCustomerTxScreen
 import com.daftar.app.ui.feature.newhawala.NewHawalaScreen
+import com.daftar.app.ui.feature.newhawala.ReceiveHawalaScreen
 import com.daftar.app.ui.feature.pnl.PnlScreen
 import com.daftar.app.ui.feature.auth.AuthScreen
 import com.daftar.app.ui.feature.rates.RatesScreen
@@ -138,6 +139,8 @@ fun DaftarApp(appViewModel: AppViewModel = hiltViewModel()) {
                             },
                         ),
                     ) { NewHawalaScreen(navController) }
+
+                    composable(DaftarDestinations.RECEIVE_HAWALA) { ReceiveHawalaScreen(navController) }
 
                     composable(
                         DaftarDestinations.NEW_CUSTOMER_TX,
