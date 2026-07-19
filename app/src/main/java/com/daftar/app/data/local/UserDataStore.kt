@@ -255,6 +255,7 @@ class UserDataStore @Inject constructor(@ApplicationContext context: Context) {
         .put("ts", t.timestampMillis)
         .put("note", t.note ?: JSONObject.NULL)
         .put("hawalaId", t.hawalaId ?: JSONObject.NULL)
+        .put("photoUris", JSONArray(t.photoUris))
         .put(
             "conversion",
             t.conversion?.let {
@@ -276,6 +277,9 @@ class UserDataStore @Inject constructor(@ApplicationContext context: Context) {
         timestampMillis = o.getLong("ts"),
         note = o.optStringOrNull("note"),
         hawalaId = o.optStringOrNull("hawalaId"),
+        photoUris = o.optJSONArray("photoUris")?.let { arr ->
+            (0 until arr.length()).map { arr.getString(it) }
+        } ?: emptyList(),
         conversion = if (o.isNull("conversion")) null else o.getJSONObject("conversion").let {
             CurrencyConversion(
                 receivedAmount = it.getDouble("receivedAmount"),

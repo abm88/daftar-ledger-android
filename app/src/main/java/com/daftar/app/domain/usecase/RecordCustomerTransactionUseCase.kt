@@ -18,6 +18,8 @@ data class CustomerTxDraft(
     val convert: Boolean = false,
     val convertToCurrency: String = "AFN",
     val conversionRate: Double = 0.0,
+    /** v20 attached receipt photos (content:// URIs). */
+    val photoUris: List<String> = emptyList(),
 )
 
 sealed interface RecordCustomerTxResult {
@@ -75,6 +77,7 @@ class RecordCustomerTransactionUseCase @Inject constructor(
                     creditedCurrency = creditedCurrency,
                 )
             } else null,
+            photoUris = draft.photoUris,
         )
         customerRepository.addTransaction(customerId, tx)
         return RecordCustomerTxResult.Recorded(tx, customer.name)
