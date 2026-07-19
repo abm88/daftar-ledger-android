@@ -29,6 +29,7 @@ import androidx.compose.material.icons.rounded.Group
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Public
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Tag
 import androidx.compose.material3.Icon
@@ -96,6 +97,8 @@ data class ShopUiState(
     val reportingCurrency: String = "AFN",
     val tradeCurrency: String = "USD",
     val setupNeeded: Boolean = false,
+    val fxTradeCount: Int = 0,
+    val teamMemberCount: Int = 0,
 )
 
 @HiltViewModel
@@ -107,6 +110,7 @@ class ShopViewModel @Inject constructor(
     cashRepository: CashRepository,
     ratesRepository: RatesRepository,
     settingsRepository: SettingsRepository,
+    teamRepository: com.daftar.app.domain.repository.TeamRepository,
     pnlCalculator: PnlCalculator,
     converter: CurrencyConverter,
     authRepository: AuthRepository,
@@ -120,7 +124,7 @@ class ShopViewModel @Inject constructor(
 
     val uiState = combine(
         combine(partnerRepository.partners, customerRepository.customers) { p, c -> p to c },
-        combine(fxRepository.trades, investmentRepository.investments) { t, i -> t to i },
+        combine(fxRepository.trades, investmentRepository.investments, teamRepository.members) { t, i, tm -> Triple(t, i, tm) },
         cashRepository.drawer,
         ratesRepository.rateBook,
         combine(
@@ -128,7 +132,7 @@ class ShopViewModel @Inject constructor(
             settingsRepository.shopProfile,
             authRepository.sessionUser,
         ) { s, pr, u -> Triple(s, pr, u) },
-    ) { (partners, customers), (trades, investments), drawer, rates, (settings, profile, user) ->
+    ) { (partners, customers), (trades, investments, teamMembers), drawer, rates, (settings, profile, user) ->
         val hawalaCount = partners.sumOf { it.hawalas.size }
         val txCount = customers.sumOf { it.transactions.size }
 
@@ -159,6 +163,8 @@ class ShopViewModel @Inject constructor(
             reportingCurrency = reporting,
             tradeCurrency = settings.tradeCurrency,
             setupNeeded = !hasBalances && investments.isEmpty(),
+            fxTradeCount = trades.size,
+            teamMemberCount = teamMembers.size,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ShopUiState())
 }
@@ -193,11 +199,23 @@ fun ShopScreen(
             Icons.Rounded.Balance, "Live Rates",
             "USD/AFN · PKR/AFN · USD/PKR — view & broadcast", DaftarDestinations.RATES,
         ),
+        // v20: Exchange lives in Daftar and opens the full FX ledger (trades, rates, P&L).
+        ShopItem(
+            Icons.Rounded.Refresh, "Exchange · اسعارو تبادله",
+            "${state.fxTradeCount} trades · FX ledger, rates & P&L",
+            DaftarDestinations.FX_LEDGER,
+        ),
         // v18: partner sarafs moved from the Accounts tab to Daftar → Branches.
         ShopItem(
             Icons.Rounded.Group, "Branches · څانګې",
             "${state.partnerCount} partner sarafs · net positions & settlements",
             DaftarDestinations.BRANCHES,
+        ),
+        // v20: Team members — track expenses per person.
+        ShopItem(
+            Icons.Rounded.Person, "Team · ټیم",
+            "${state.teamMemberCount} members · track expenses per person",
+            DaftarDestinations.TEAM,
         ),
         ShopItem(
             Icons.Rounded.BusinessCenter, "Assets · Currencies & Metals",

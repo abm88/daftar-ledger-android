@@ -33,6 +33,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -62,7 +65,9 @@ import com.daftar.app.domain.usecase.DeleteCustomerTransactionUseCase
 import com.daftar.app.domain.usecase.PositionCalculator
 import com.daftar.app.ui.common.IconSquareButton
 import com.daftar.app.ui.common.LocalToaster
+import com.daftar.app.ui.common.FullScreenPhotoViewer
 import com.daftar.app.ui.common.MonoLabel
+import com.daftar.app.ui.common.PhotoAttachmentSection
 import com.daftar.app.ui.common.ToastCenter
 import com.daftar.app.ui.common.ToastIcon
 import com.daftar.app.ui.common.CustomerBadge
@@ -152,6 +157,7 @@ fun CustomerTxDetailScreen(
     val toaster = LocalToaster.current
     val printContext = androidx.compose.ui.platform.LocalContext.current
     val clipboard = LocalClipboardManager.current
+    var viewerUri by remember { mutableStateOf<String?>(null) }
 
     val isDebit = tx.type.isDebit
     val directionLabel = if (isDebit) "You Gave" else "You Received"
@@ -397,6 +403,19 @@ fun CustomerTxDetailScreen(
                 }
             }
 
+            // v20: attached receipt photos (same 5-per-row grid, tap to enlarge).
+            if (tx.photoUris.isNotEmpty()) {
+                item {
+                    DetailSectionTitle("Photos · انځورونه")
+                    PhotoAttachmentSection(
+                        uris = tx.photoUris,
+                        editable = false,
+                        onOpen = { viewerUri = it },
+                        modifier = Modifier.padding(horizontal = 20.dp),
+                    )
+                }
+            }
+
             item {
                 DetailSectionTitle("Share with account holder")
                 Row(
@@ -506,6 +525,10 @@ fun CustomerTxDetailScreen(
                 )
             }
         }
+    }
+
+    viewerUri?.let { uri ->
+        FullScreenPhotoViewer(uri, onDismiss = { viewerUri = null })
     }
 }
 

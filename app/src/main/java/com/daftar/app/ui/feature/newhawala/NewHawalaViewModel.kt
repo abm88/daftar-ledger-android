@@ -28,7 +28,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-enum class HawalaPicker { NONE, FROM_CITY, TO_CITY, PARTNER, SENDER_ACCOUNT }
+// v20 removed the From/To city pickers from the send form.
+enum class HawalaPicker { NONE, PARTNER, SENDER_ACCOUNT }
 
 data class NewHawalaFormState(
     val currency: String = "USD",
@@ -63,6 +64,8 @@ data class NewHawalaUiState(
     val commissionAmount: Double = 0.0,
     val senderBalance: Double = 0.0,
     val customerBalances: Map<String, Double> = emptyMap(),
+    /** Enabled currency codes for the pill row (metals excluded). */
+    val activeCurrencies: List<String> = listOf("USD", "AFN", "PKR"),
 ) {
     val amount: Double get() = form.amountText.toDoubleOrNull() ?: 0.0
     val totalDebit: Double get() = amount + commissionAmount
@@ -109,9 +112,11 @@ class NewHawalaViewModel @Inject constructor(
         form.asStateFlow(),
         partnerRepository.partners,
         customerRepository.customers,
-    ) { form, partners, customers ->
+        settingsRepository.settings,
+    ) { form, partners, customers, settings ->
         val senderCustomer = form.senderCustomerId?.let { id -> customers.firstOrNull { it.id == id } }
         val amount = form.amountText.toDoubleOrNull() ?: 0.0
+        val active = settings.activeCurrencies().map { it.code }
         NewHawalaUiState(
             form = form,
             partner = partners.firstOrNull { it.id == form.partnerId },
@@ -127,6 +132,7 @@ class NewHawalaViewModel @Inject constructor(
             customerBalances = customers.associate { c ->
                 c.id to positionCalculator.customerBalance(c)[form.currency]
             },
+            activeCurrencies = if (form.currency in active) active else active + form.currency,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NewHawalaUiState())
 
@@ -162,7 +168,17 @@ class NewHawalaViewModel @Inject constructor(
         form.value = form.value.copy(
             senderCustomerId = customer.id,
             senderName = customer.name,
+            senderMode = SenderMode.ACCOUNT,
             picker = HawalaPicker.NONE,
+        )
+    }
+
+    /** v20 unified sender field: the × on the account card returns to walk-in entry. */
+    fun clearSenderCustomer() {
+        form.value = form.value.copy(
+            senderCustomerId = null,
+            senderName = "",
+            senderMode = SenderMode.CASH,
         )
     }
 
@@ -201,6 +217,7 @@ class NewHawalaViewModel @Inject constructor(
                 form.value = form.value.copy(
                     senderCustomerId = customer.id,
                     senderName = customer.name,
+                    senderMode = SenderMode.ACCOUNT,
                     picker = HawalaPicker.NONE,
                     addCustomerOpen = false,
                 )

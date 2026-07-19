@@ -40,6 +40,7 @@ import com.daftar.app.ui.feature.customertx.CustomerTxDetailScreen
 import com.daftar.app.ui.feature.defaults.DefaultsScreen
 import com.daftar.app.ui.feature.detail.CustomerDetailScreen
 import com.daftar.app.ui.feature.detail.PartnerDetailScreen
+import com.daftar.app.ui.feature.expense.NewExpenseScreen
 import com.daftar.app.ui.feature.fx.FxFormScreen
 import com.daftar.app.ui.feature.fx.FxLedgerScreen
 import com.daftar.app.ui.feature.hawaladetail.HawalaDetailScreen
@@ -47,6 +48,7 @@ import com.daftar.app.ui.feature.investments.InvestmentsScreen
 import com.daftar.app.ui.feature.main.MainScreen
 import com.daftar.app.ui.feature.newcusttx.NewCustomerTxScreen
 import com.daftar.app.ui.feature.newhawala.NewHawalaScreen
+import com.daftar.app.ui.feature.newhawala.ReceiveHawalaScreen
 import com.daftar.app.ui.feature.pnl.PnlScreen
 import com.daftar.app.ui.feature.auth.AuthScreen
 import com.daftar.app.ui.feature.rates.RatesScreen
@@ -55,6 +57,8 @@ import com.daftar.app.ui.feature.setup.InitialSetupScreen
 import com.daftar.app.ui.feature.statements.BusinessStatementScreen
 import com.daftar.app.ui.feature.statements.CustomerStatementScreen
 import com.daftar.app.ui.feature.statements.PartnerStatementScreen
+import com.daftar.app.ui.feature.team.TeamMemberDetailScreen
+import com.daftar.app.ui.feature.team.TeamScreen
 import com.daftar.app.ui.navigation.DaftarDestinations
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -136,6 +140,8 @@ fun DaftarApp(appViewModel: AppViewModel = hiltViewModel()) {
                         ),
                     ) { NewHawalaScreen(navController) }
 
+                    composable(DaftarDestinations.RECEIVE_HAWALA) { ReceiveHawalaScreen(navController) }
+
                     composable(
                         DaftarDestinations.NEW_CUSTOMER_TX,
                         arguments = listOf(
@@ -157,6 +163,28 @@ fun DaftarApp(appViewModel: AppViewModel = hiltViewModel()) {
 
                     composable(DaftarDestinations.NEW_FX) { FxFormScreen(navController) }
                     composable(DaftarDestinations.FX_LEDGER) { FxLedgerScreen(navController) }
+
+                    composable(
+                        DaftarDestinations.NEW_EXPENSE,
+                        arguments = listOf(
+                            navArgument("teamMemberId") {
+                                type = NavType.StringType
+                                nullable = true
+                                defaultValue = null
+                            },
+                        ),
+                    ) { NewExpenseScreen(navController) }
+
+                    composable(DaftarDestinations.TEAM) { TeamScreen(navController) }
+                    composable(
+                        DaftarDestinations.TEAM_MEMBER_DETAIL,
+                        arguments = listOf(navArgument("memberId") { type = NavType.StringType }),
+                    ) { entry ->
+                        TeamMemberDetailScreen(
+                            navController = navController,
+                            memberId = entry.arguments?.getString("memberId").orEmpty(),
+                        )
+                    }
 
                     composable(
                         DaftarDestinations.SETTLE,

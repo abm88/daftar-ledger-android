@@ -23,13 +23,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.MenuBook
+import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.automirrored.rounded.TrendingDown
 import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.ArrowDownward
+import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Balance
 import androidx.compose.material.icons.rounded.BusinessCenter
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -46,6 +50,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDirection
@@ -78,14 +83,12 @@ import com.daftar.app.ui.theme.NotoNaskhArabic
 import kotlinx.coroutines.delay
 
 /**
- * Once-per-process guard for the first-run FAB tooltip, mirroring v18's
- * in-memory fabTooltipSeen flag (deliberately not persisted).
+ * Home tab: greeting, cash-on-hand card, New Entry quick actions, ledger preview.
+ *
+ * v20 removed the floating New Entry FAB here (it survives only on the General
+ * Ledger tab) and replaced it with an inline "New Entry · نوې لیکنه" section of
+ * quick-create CTAs. The four ledger hub cards were already gone in v18.
  */
-internal object FabTooltipSession {
-    var seen: Boolean = false
-}
-
-/** Home tab: greeting, cash-on-hand card, ledger preview, New Entry FAB. */
 @Composable
 fun HomeScreen(
     navController: NavController,
@@ -96,33 +99,12 @@ fun HomeScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var ratesSheetOpen by rememberSaveable { mutableStateOf(false) }
 
-    // v18 first-visit tooltip: shows ~0.8s after the splash clears (2.8s from
-    // boot), auto-fades after 4.5s, and is marked seen once the FAB is used.
-    // The balloon markup is reconstructed from v18's CSS — the prototype ships
-    // the styles/handlers but never emits the element.
-    var fabTooltipVisible by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        if (!FabTooltipSession.seen) {
-            delay(2800)
-            if (!FabTooltipSession.seen) {
-                fabTooltipVisible = true
-                delay(4500)
-                fabTooltipVisible = false
-                FabTooltipSession.seen = true
-            }
-        }
-    }
-    val openNewEntry = {
-        FabTooltipSession.seen = true
-        fabTooltipVisible = false
-        onOpenNewEntry()
-    }
-
-    Box(modifier = Modifier.fillMaxWidth()) {
-        LazyColumn(
-            modifier = Modifier.statusBarsPadding(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 120.dp),
-        ) {
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxWidth()
+            .statusBarsPadding(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp),
+    ) {
             item { HomeHeader(state, syncing = state.syncing, onSync = viewModel::sync) }
 
             if (state.setupNeeded) {
@@ -140,6 +122,17 @@ fun HomeScreen(
                 )
             }
 
+            // v20: inline quick-create section replaces the floating FAB.
+            item {
+                NewEntryQuickSection(
+                    onReceived = { navController.navigate(DaftarDestinations.newCustomerTx(mode = "received")) },
+                    onGave = { navController.navigate(DaftarDestinations.newCustomerTx(mode = "gave")) },
+                    onExchange = { navController.navigate(DaftarDestinations.NEW_FX) },
+                    onHawala = { navController.navigate(DaftarDestinations.newHawala()) },
+                    onExpense = { navController.navigate(DaftarDestinations.newExpense()) },
+                )
+            }
+
             if (state.feedTotal == 0) {
                 // v18: an empty feed replaces the whole section (header included)
                 // with the rich zero-state and its New Entry CTA.
@@ -152,7 +145,7 @@ fun HomeScreen(
                         tone = EmptyStateTone.COPPER,
                         ctaLabel = "New Entry · نوې لیکنه",
                         ctaIcon = Icons.Rounded.Add,
-                        onCta = openNewEntry,
+                        onCta = onOpenNewEntry,
                     )
                 }
             } else {
@@ -242,73 +235,172 @@ fun HomeScreen(
             }
         }
 
-        NewEntryFab(
-            onClick = openNewEntry,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 20.dp, bottom = 20.dp),
-        )
-
-        if (fabTooltipVisible) {
-            FabTooltipBalloon(
-                onDismiss = {
-                    FabTooltipSession.seen = true
-                    fabTooltipVisible = false
-                },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 24.dp, bottom = 92.dp),
-            )
-        }
-    }
-
     if (ratesSheetOpen) {
         UpdateRatesSheet(onDismiss = { ratesSheetOpen = false })
     }
 }
 
-/** Ink balloon with a gold ring nudging first-time users toward the FAB. */
+/**
+ * v20 "New Entry · نوې لیکنه" quick-create section: two primary CTAs (You
+ * Received green / You Gave red) over a three-tile row (Exchange, Hawala,
+ * Expense). Mirrors the prototype's .home-quick-* markup.
+ */
 @Composable
-private fun FabTooltipBalloon(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(DaftarColors.Ink)
-            .border(1.dp, DaftarColors.Gold.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
-            .clickable(onClick = onDismiss)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-    ) {
+private fun NewEntryQuickSection(
+    onReceived: () -> Unit,
+    onGave: () -> Unit,
+    onExchange: () -> Unit,
+    onHawala: () -> Unit,
+    onExpense: () -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Row(
+            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            Icon(
+                imageVector = Icons.Rounded.Add,
+                contentDescription = null,
+                tint = DaftarColors.Copper,
+                modifier = Modifier.size(11.dp),
+            )
+            MonoLabel("New Entry · نوې لیکنه", letterSpacing = 0.18)
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            PrimaryQuickButton(
+                label = "You Received", pashto = "ترلاسه کړل",
+                icon = Icons.Rounded.ArrowDownward, container = DaftarColors.Green,
+                modifier = Modifier.weight(1f), onClick = onReceived,
+            )
+            PrimaryQuickButton(
+                label = "You Gave", pashto = "ورکړل",
+                icon = Icons.Rounded.ArrowUpward, container = DaftarColors.Red,
+                modifier = Modifier.weight(1f), onClick = onGave,
+            )
+        }
+
+        Spacer(Modifier.height(10.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            QuickTile(
+                label = "Exchange", pashto = "تبادله", icon = Icons.Rounded.Refresh,
+                iconBackground = DaftarColors.Copper.copy(alpha = 0.12f), iconTint = DaftarColors.Copper,
+                modifier = Modifier.weight(1f), onClick = onExchange,
+            )
+            QuickTile(
+                label = "Hawala", pashto = "حواله", icon = Icons.AutoMirrored.Rounded.Send,
+                iconBackground = DaftarColors.Gold.copy(alpha = 0.18f), iconTint = DaftarColors.CopperDeep,
+                modifier = Modifier.weight(1f), onClick = onHawala,
+            )
+            QuickTile(
+                label = "Expense", pashto = "ورداشت", icon = Icons.Rounded.ReceiptLong,
+                iconBackground = DaftarColors.Red.copy(alpha = 0.1f), iconTint = DaftarColors.Red,
+                modifier = Modifier.weight(1f), onClick = onExpense,
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+    }
+}
+
+@Composable
+private fun PrimaryQuickButton(
+    label: String,
+    pashto: String,
+    icon: ImageVector,
+    container: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(container)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 15.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(11.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color.White.copy(alpha = 0.2f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, null, tint = DaftarColors.Paper, modifier = Modifier.size(18.dp))
+        }
+        Column {
             Text(
-                text = "New Entry",
+                text = label,
                 style = TextStyle(
-                    fontFamily = Fraunces,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 14.sp,
-                    color = DaftarColors.Paper,
+                    fontFamily = Fraunces, fontWeight = FontWeight.Medium,
+                    fontSize = 16.sp, color = DaftarColors.Paper,
                 ),
             )
             Text(
-                text = "نوې لیکنه",
+                text = pashto,
                 style = TextStyle(
-                    fontFamily = NotoNaskhArabic,
-                    fontSize = 11.sp,
-                    color = DaftarColors.GoldSoft,
+                    fontFamily = NotoNaskhArabic, fontSize = 11.sp,
+                    color = DaftarColors.Paper.copy(alpha = 0.85f),
                     textDirection = TextDirection.Rtl,
                 ),
             )
         }
-        Spacer(Modifier.height(2.dp))
+    }
+}
+
+@Composable
+private fun QuickTile(
+    label: String,
+    pashto: String,
+    icon: ImageVector,
+    iconBackground: Color,
+    iconTint: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(DaftarColors.PaperSoft)
+            .border(1.dp, DaftarColors.Line, RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(11.dp))
+                .background(iconBackground),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, null, tint = iconTint, modifier = Modifier.size(17.dp))
+        }
         Text(
-            text = "RECORD A TRADE, HAWALA, OR ACCOUNT ENTRY",
+            text = label,
             style = TextStyle(
-                fontFamily = JetBrainsMono,
-                fontSize = 8.sp,
-                letterSpacing = 0.08.em,
-                color = DaftarColors.MutedLight,
+                fontFamily = Inter, fontWeight = FontWeight.SemiBold,
+                fontSize = 12.sp, color = DaftarColors.Ink,
+            ),
+        )
+        Text(
+            text = pashto,
+            style = TextStyle(
+                fontFamily = NotoNaskhArabic, fontSize = 10.sp,
+                color = DaftarColors.Muted, textDirection = TextDirection.Rtl,
             ),
         )
     }

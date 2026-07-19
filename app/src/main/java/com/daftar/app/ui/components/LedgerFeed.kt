@@ -152,6 +152,31 @@ private fun styleFor(entry: LedgerEntry): LedgerRowStyle = when (entry) {
     }
 }
 
+/** The rendered feed title for an entry (used by the General Ledger table view). */
+fun ledgerEntryTitle(entry: LedgerEntry): String = styleFor(entry).title
+
+/** The dot background/tint for an entry (General Ledger table view). */
+fun ledgerEntryIconStyle(entry: LedgerEntry): Pair<ImageVector, Color> =
+    styleFor(entry).let { it.icon to it.tint }
+
+fun ledgerEntryIconBackground(entry: LedgerEntry): Color = styleFor(entry).background
+
+/**
+ * Money in (true) vs out (false) for the accounting table, mirroring the
+ * prototype's dirOf(): explicit +/− prefixes win; hawalas fall back to
+ * direction (receive = in), FX to its P&L colour (loss = out).
+ */
+fun ledgerEntryIsIncoming(entry: LedgerEntry): Boolean {
+    val style = styleFor(entry)
+    return when {
+        style.amountPrefix == "+" -> true
+        style.amountPrefix == "−" -> false
+        entry is LedgerEntry.HawalaEntry -> entry.hawala.type == HawalaType.RECEIVE
+        entry is LedgerEntry.FxEntry -> style.amountColor != DaftarColors.Red
+        else -> style.amountColor == DaftarColors.Green
+    }
+}
+
 @Composable
 fun LedgerEntryRow(entry: LedgerEntry, onOpen: (LedgerEntry) -> Unit) {
     val style = styleFor(entry)

@@ -36,8 +36,15 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -75,6 +82,9 @@ import com.daftar.app.ui.common.FieldTextInput
 import com.daftar.app.ui.common.IconSquareButton
 import com.daftar.app.ui.common.MonoLabel
 import com.daftar.app.ui.common.SheetHandle
+import com.daftar.app.ui.common.FullScreenPhotoViewer
+import com.daftar.app.ui.common.MAX_TX_PHOTOS
+import com.daftar.app.ui.common.PhotoAttachmentSection
 import com.daftar.app.ui.common.SubmitButton
 import com.daftar.app.ui.common.ToastCenter
 import com.daftar.app.ui.common.ToastIcon
@@ -115,6 +125,8 @@ data class NewCustTxFormState(
     val addCustomerOpen: Boolean = false,
     /** Red error styling on the amount after a failed save attempt (v18 shake). */
     val amountError: Boolean = false,
+    /** v20 attached receipt photos (content:// URIs), up to MAX_TX_PHOTOS. */
+    val photoUris: List<String> = emptyList(),
 )
 
 data class NewCustTxUiState(
@@ -253,6 +265,7 @@ class NewCustomerTxViewModel @Inject constructor(
                     convert = form.convert,
                     convertToCurrency = form.convertTo,
                     conversionRate = state.rate,
+                    photoUris = form.photoUris,
                 ),
             )
             if (result is RecordCustomerTxResult.Recorded) {
@@ -282,6 +295,30 @@ fun NewCustomerTxScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val form = state.form
+
+    // v20 receipt-photo attachments — native picker (gallery multi-select) + viewer.
+    val context = LocalContext.current
+    var viewerUri by remember { mutableStateOf<String?>(null) }
+    val photoPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(MAX_TX_PHOTOS),
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            uris.forEach { uri ->
+                // Persist read access so the photos survive app restarts.
+                runCatching {
+                    context.contentResolver.takePersistableUriPermission(
+                        uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                    )
+                }
+            }
+            viewModel.update { f ->
+                f.copy(photoUris = (f.photoUris + uris.map { it.toString() }).distinct().take(MAX_TX_PHOTOS))
+            }
+        }
+    }
+    val launchPicker = {
+        photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+    }
 
     val (headerColor, headerTitle, headerPashto, headerIcon) = when (form.mode) {
         CustTxMode.GAVE -> listOf(DaftarColors.Red, "You Gave", "تاسو ورکړل", Icons.Rounded.ArrowUpward)
@@ -539,6 +576,16 @@ fun NewCustomerTxScreen(
                 )
             }
 
+            // v20 receipt photos — Add photo CTA / thumbnail grid.
+            Spacer(Modifier.height(12.dp))
+            PhotoAttachmentSection(
+                uris = form.photoUris,
+                editable = true,
+                onOpen = { viewerUri = it },
+                onAdd = launchPicker,
+                onRemove = { uri -> viewModel.update { it.copy(photoUris = it.photoUris - uri) } },
+            )
+
             Spacer(Modifier.height(12.dp))
             // Convert toggle
             Row(
@@ -715,6 +762,10 @@ fun NewCustomerTxScreen(
                 viewModel.addCustomerAndSelect(name, shortName, initial, phone, city, notes, openings)
             },
         )
+    }
+
+    viewerUri?.let { uri ->
+        FullScreenPhotoViewer(uri, onDismiss = { viewerUri = null })
     }
 }
 

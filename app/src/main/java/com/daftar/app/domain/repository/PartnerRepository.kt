@@ -13,6 +13,9 @@ interface PartnerRepository {
     suspend fun addHawalas(partnerId: String, hawalas: List<Hawala>)
     suspend fun markHawalaPaid(hawalaId: String, dateLabel: String)
 
+    /** Cancel a hawala — removes it from its partner's ledger (v20 Cancel Hawala). */
+    suspend fun removeHawala(hawalaId: String)
+
     /** Remove all partners and their hawalas — a fresh account starts with a blank shop. */
     suspend fun clearAll()
 

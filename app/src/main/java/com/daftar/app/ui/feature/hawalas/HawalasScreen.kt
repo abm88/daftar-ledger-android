@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -23,6 +22,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.ArrowDownward
+import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -252,24 +253,7 @@ fun HawalasScreen(
                     DaftarFilterChip("Pending · ${state.pendingCount}", state.statusFilter == HawalaStatusFilter.PENDING, { viewModel.setStatusFilter(HawalaStatusFilter.PENDING) })
                     DaftarFilterChip("Settled · ${state.paidCount}", state.statusFilter == HawalaStatusFilter.PAID, { viewModel.setStatusFilter(HawalaStatusFilter.PAID) })
                 }
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 20.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    listOf("all" to "All currencies", "USD" to "USD", "AFN" to "AFN", "PKR" to "PKR")
-                        .forEach { (id, label) ->
-                            DaftarFilterChip(
-                                label = label,
-                                selected = state.currencyFilter == id,
-                                onClick = { viewModel.setCurrencyFilter(id) },
-                                selectedColor = if (id == "all") DaftarColors.Ink else DaftarColors.Copper,
-                            )
-                        }
-                }
+                // v20 removed the currency filter row (status filters + search only).
                 Spacer(Modifier.height(6.dp))
             }
 
@@ -323,35 +307,76 @@ fun HawalasScreen(
             }
         }
 
-        // FAB — start a new hawala from here too
+        // v20: dual FAB — start a Send or Receive hawala from here.
         Row(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 20.dp, bottom = 20.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(DaftarColors.Copper)
-                .clickable { navController.navigate(DaftarDestinations.newHawala()) }
-                .padding(horizontal = 20.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                .padding(end = 20.dp, bottom = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Rounded.Send,
-                contentDescription = null,
-                tint = DaftarColors.Paper,
-                modifier = Modifier.size(16.dp),
+            HawalaFab("Send", "لیږل", Icons.Rounded.ArrowUpward, DaftarColors.Copper) {
+                navController.navigate(DaftarDestinations.newHawala())
+            }
+            HawalaFab("Receive", "ترلاسه", Icons.Rounded.ArrowDownward, DaftarColors.Green) {
+                navController.navigate(DaftarDestinations.RECEIVE_HAWALA)
+            }
+        }
+    }
+}
+
+@Composable
+private fun HawalaFab(label: String, pashto: String, icon: androidx.compose.ui.graphics.vector.ImageVector, container: androidx.compose.ui.graphics.Color, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(container)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(icon, null, tint = DaftarColors.Paper, modifier = Modifier.size(15.dp))
+        Column {
+            Text(
+                text = label,
+                style = TextStyle(fontFamily = Fraunces, fontWeight = FontWeight.Medium, fontSize = 14.sp, color = DaftarColors.Paper),
             )
             Text(
-                text = "NEW HAWALA",
-                style = TextStyle(
-                    fontFamily = JetBrainsMono,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
-                    letterSpacing = 0.05.em,
-                    color = DaftarColors.Paper,
-                ),
+                text = pashto,
+                style = TextStyle(fontFamily = com.daftar.app.ui.theme.NotoNaskhArabic, fontSize = 9.sp, color = DaftarColors.Paper.copy(alpha = 0.85f), textDirection = TextDirection.Rtl),
             )
         }
+    }
+}
+
+/** Send (copper/up) vs Receive (green/down) direction pill on each hawala card. */
+@Composable
+internal fun HawalaDirectionBadge(send: Boolean) {
+    val color = if (send) DaftarColors.Copper else DaftarColors.Green
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(5.dp))
+            .background(color.copy(alpha = 0.12f))
+            .padding(horizontal = 7.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Icon(
+            imageVector = if (send) Icons.Rounded.ArrowUpward else Icons.Rounded.ArrowDownward,
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier.size(10.dp),
+        )
+        Text(
+            text = if (send) "SEND" else "RECEIVE",
+            style = TextStyle(
+                fontFamily = JetBrainsMono,
+                fontWeight = FontWeight.Bold,
+                fontSize = 8.sp,
+                letterSpacing = 0.12.em,
+                color = color,
+            ),
+        )
     }
 }
 
@@ -372,7 +397,7 @@ private fun HawalaRow(row: HawalaRowUi, onClick: () -> Unit) {
             modifier = Modifier
                 .width(3.dp)
                 .fillMaxHeight()
-                .background(if (send) DaftarColors.Red else DaftarColors.Green),
+                .background(if (send) DaftarColors.Copper else DaftarColors.Green),
         )
         Column(modifier = Modifier.padding(12.dp)) {
             Row(
@@ -380,16 +405,8 @@ private fun HawalaRow(row: HawalaRowUi, onClick: () -> Unit) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = "${h.fromCity.code} ${if (send) "→" else "←"} ${h.toCity.code}",
-                    style = TextStyle(
-                        fontFamily = JetBrainsMono,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 10.sp,
-                        letterSpacing = 0.15.em,
-                        color = DaftarColors.Muted,
-                    ),
-                )
+                // v20: Send/Receive direction badge replaces the city route.
+                HawalaDirectionBadge(send)
                 Row(verticalAlignment = Alignment.Bottom) {
                     Text(
                         text = Formatters.number(h.amount),

@@ -7,6 +7,7 @@ import com.daftar.app.domain.model.Counterparty
 import com.daftar.app.domain.model.Customer
 import com.daftar.app.domain.model.CustomerTransaction
 import com.daftar.app.domain.model.CustomerTxType
+import com.daftar.app.domain.model.Expense
 import com.daftar.app.domain.model.FxSide
 import com.daftar.app.domain.model.FxTrade
 import com.daftar.app.domain.model.Hawala
@@ -18,6 +19,7 @@ import com.daftar.app.domain.model.PartnerTier
 import com.daftar.app.domain.model.Rate
 import com.daftar.app.domain.model.RateBook
 import com.daftar.app.domain.model.RatePair
+import com.daftar.app.domain.model.TeamMember
 
 /**
  * Demo dataset mirroring the design prototype. Replaced by the API layer later —
@@ -143,6 +145,23 @@ class SeedData(timeProvider: TimeProvider) {
                 tx("ct12", CustomerTxType.OPENING, 1_200.0, "USD", "05 Mar 2026", daysAgo(49), "Opening deposit"),
                 tx("ct13", CustomerTxType.DEPOSIT, 900.0, "USD", "22 Mar 2026", daysAgo(32), "Weekly deposit"),
             ),
+        ),
+    )
+
+    // v20: team members and the expenses booked against each of them.
+    val teamMembers = listOf(
+        TeamMember(id = "tm1", name = "Azam", role = "Partner", phone = "+93 70 111 2222"),
+        TeamMember(id = "tm2", name = "Daud Sarafi", role = "Owner", phone = "+93 70 333 4444"),
+    )
+
+    val expenses = listOf(
+        Expense(
+            id = "exp1", amount = 3_000.0, currency = "AFN", teamMemberId = "tm1",
+            note = "Shop rent share", timestampMillis = daysAgo(2), dateLabel = "2 days ago",
+        ),
+        Expense(
+            id = "exp2", amount = 450.0, currency = "AFN", teamMemberId = "tm2",
+            note = "Tea & lunch", timestampMillis = hoursAgo(1), dateLabel = "Today",
         ),
     )
 

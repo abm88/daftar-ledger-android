@@ -13,6 +13,9 @@ interface SettingsRepository {
     suspend fun setTradeCurrency(code: String)
     suspend fun setAssetActive(code: String, active: Boolean)
 
+    /** Persist the General Ledger view mode (false = feed, true = accounting table). */
+    suspend fun setLedgerTableView(tableView: Boolean)
+
     /** Swap in another account's preferences (per-user persistence restore / blank-shop reset). */
     suspend fun replaceSettings(settings: LedgerSettings)
 }

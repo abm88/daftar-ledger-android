@@ -12,14 +12,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.List
 import androidx.compose.material.icons.automirrored.rounded.MenuBook
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Print
 import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,10 +30,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -75,6 +81,26 @@ enum class LedgerFilter(val label: String, val kind: LedgerEntryKind?) {
     SETTLE("Settle", LedgerEntryKind.SETTLEMENT),
 }
 
+/** One entry rendered as an accounting-table row (v20 Table view). */
+data class LedgerTableRow(
+    val title: String,
+    val timeLabel: String,
+    val isIn: Boolean,
+    val amount: Double,
+    val currency: String,
+    val entry: LedgerEntry,
+)
+
+data class LedgerTableDay(val label: String, val netAfn: Double, val rows: List<LedgerTableRow>)
+
+data class LedgerTableData(
+    val days: List<LedgerTableDay> = emptyList(),
+    val totalInAfn: Double = 0.0,
+    val totalOutAfn: Double = 0.0,
+) {
+    val netAfn: Double get() = totalInAfn - totalOutAfn
+}
+
 data class GeneralLedgerUiState(
     val entries: List<LedgerEntry> = emptyList(),
     val totalCount: Int = 0,
@@ -86,6 +112,9 @@ data class GeneralLedgerUiState(
     val todayOutAfn: Double = 0.0,
     val todayStartMillis: Long = 0,
     val syncing: Boolean = false,
+    /** v20 persisted view mode: false = feed, true = accounting table. */
+    val tableView: Boolean = false,
+    val tableData: LedgerTableData = LedgerTableData(),
 ) {
     val todayNetAfn: Double get() = todayInAfn - todayOutAfn
 }
@@ -94,6 +123,7 @@ data class GeneralLedgerUiState(
 class GeneralLedgerViewModel @Inject constructor(
     activityFeedBuilder: ActivityFeedBuilder,
     ratesRepository: RatesRepository,
+    private val settingsRepository: com.daftar.app.domain.repository.SettingsRepository,
     private val timeProvider: TimeProvider,
     private val toastCenter: com.daftar.app.ui.common.ToastCenter,
 ) : ViewModel() {
@@ -116,10 +146,9 @@ class GeneralLedgerViewModel @Inject constructor(
     val uiState = combine(
         activityFeedBuilder.observe(),
         ratesRepository.rateBook,
-        filter,
-        search,
-        syncing,
-    ) { feed, rates, filter, search, syncing ->
+        settingsRepository.settings,
+        combine(filter, search, syncing) { f, s, sy -> Triple(f, s, sy) },
+    ) { feed, rates, settings, (filter, search, syncing) ->
         val todayStart = timeProvider.startOfTodayMillis()
         val todayEntries = feed.filter { it.timestampMillis >= todayStart }
         var inAfn = 0.0
@@ -150,11 +179,55 @@ class GeneralLedgerViewModel @Inject constructor(
             todayOutAfn = outAfn,
             todayStartMillis = todayStart,
             syncing = syncing,
+            tableView = settings.ledgerTableView,
+            tableData = buildTableData(visible, rates, todayStart),
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), GeneralLedgerUiState())
 
     fun setFilter(value: LedgerFilter) { filter.value = value }
     fun setSearch(value: String) { search.value = value }
+
+    /** Persist the Feed/Table choice so it survives navigation and restarts. */
+    fun setTableView(tableView: Boolean) {
+        viewModelScope.launch { settingsRepository.setLedgerTableView(tableView) }
+    }
+
+    // Groups the visible entries by day, tagging each as money in/out and
+    // accumulating AFN-equivalent day-nets and grand totals for the footer.
+    private fun buildTableData(
+        entries: List<LedgerEntry>,
+        rates: com.daftar.app.domain.model.RateBook,
+        todayStart: Long,
+    ): LedgerTableData {
+        if (entries.isEmpty()) return LedgerTableData()
+        val byDay = entries.groupBy { Math.floorDiv(it.timestampMillis - todayStart, 86_400_000L) }
+        var totalIn = 0.0
+        var totalOut = 0.0
+        val days = byDay.keys.sortedDescending().map { off ->
+            val group = byDay.getValue(off)
+            var dayIn = 0.0
+            var dayOut = 0.0
+            val rows = group.map { e ->
+                val isIn = com.daftar.app.ui.components.ledgerEntryIsIncoming(e)
+                val afn = rates.toAfnOrFallback(e.currency, e.amount)
+                if (isIn) { dayIn += afn; totalIn += afn } else { dayOut += afn; totalOut += afn }
+                LedgerTableRow(
+                    title = com.daftar.app.ui.components.ledgerEntryTitle(e),
+                    timeLabel = Formatters.timeLabel(e.timestampMillis),
+                    isIn = isIn,
+                    amount = e.amount,
+                    currency = e.currency,
+                    entry = e,
+                )
+            }
+            LedgerTableDay(
+                label = Formatters.relativeDayLabel(todayStart + off * 86_400_000L, todayStart),
+                netAfn = dayIn - dayOut,
+                rows = rows,
+            )
+        }
+        return LedgerTableData(days, totalIn, totalOut)
+    }
 
     // v18 matches against the rendered title + subtitle + currency, so city
     // codes, "pending", the "You Received/You Gave" wording, and FX P&L text
@@ -284,11 +357,13 @@ fun GeneralLedgerScreen(
                 }
             }
 
+            // v20: search box and Feed/Table toggle share one row.
             item {
-                DaftarSearchField(
-                    value = state.search,
-                    onValueChange = viewModel::setSearch,
-                    placeholder = "Search ledger…",
+                LedgerControlsRow(
+                    search = state.search,
+                    onSearchChange = viewModel::setSearch,
+                    tableView = state.tableView,
+                    onSetTableView = viewModel::setTableView,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
             }
@@ -323,6 +398,13 @@ fun GeneralLedgerScreen(
                         }
                     }
                 }
+            } else if (state.tableView) {
+                item {
+                    LedgerTable(
+                        data = state.tableData,
+                        onOpen = { entry -> openLedgerEntry(entry, navController) },
+                    )
+                }
             } else {
                 ledgerFeedItems(
                     entries = state.entries,
@@ -338,6 +420,275 @@ fun GeneralLedgerScreen(
                 .align(Alignment.BottomEnd)
                 .padding(end = 20.dp, bottom = 20.dp),
         )
+    }
+}
+
+/** Search box + Feed/Table toggle sharing one row (v20). */
+@Composable
+private fun LedgerControlsRow(
+    search: String,
+    onSearchChange: (String) -> Unit,
+    tableView: Boolean,
+    onSetTableView: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        // Inline search (no outer padding, so it sits flush next to the toggle).
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(12.dp))
+                .background(DaftarColors.PaperSoft)
+                .border(1.dp, DaftarColors.LineStrong, RoundedCornerShape(12.dp))
+                .padding(horizontal = 12.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Box(modifier = Modifier.weight(1f)) {
+                if (search.isEmpty()) {
+                    Text(
+                        text = "Search ledger…",
+                        style = TextStyle(fontFamily = Inter, fontSize = 13.sp, color = DaftarColors.MutedLight),
+                    )
+                }
+                androidx.compose.foundation.text.BasicTextField(
+                    value = search,
+                    onValueChange = onSearchChange,
+                    textStyle = TextStyle(fontFamily = Inter, fontSize = 13.sp, color = DaftarColors.Ink),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            androidx.compose.material3.Icon(
+                Icons.Rounded.Search, null,
+                tint = DaftarColors.Muted,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+
+        // Compact Feed/Table toggle.
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(12.dp))
+                .background(DaftarColors.PaperDeep)
+                .border(1.dp, DaftarColors.Line, RoundedCornerShape(12.dp))
+                .padding(3.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            LedgerViewButton(
+                icon = Icons.AutoMirrored.Rounded.MenuBook,
+                selected = !tableView,
+                onClick = { onSetTableView(false) },
+            )
+            LedgerViewButton(
+                icon = Icons.AutoMirrored.Rounded.List,
+                selected = tableView,
+                onClick = { onSetTableView(true) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun LedgerViewButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (selected) DaftarColors.Ink else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 11.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        androidx.compose.material3.Icon(
+            icon, null,
+            tint = if (selected) DaftarColors.Paper else DaftarColors.Muted,
+            modifier = Modifier.size(15.dp),
+        )
+    }
+}
+
+/**
+ * Accounting-style table: Entry / In (green) / Out (red) columns grouped by day
+ * with day-nets and a totals footer. Small, low-weight text for max density.
+ */
+@Composable
+private fun LedgerTable(data: LedgerTableData, onOpen: (LedgerEntry) -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .padding(bottom = 30.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .border(1.dp, DaftarColors.Line, RoundedCornerShape(14.dp))
+            .background(DaftarColors.PaperSoft),
+    ) {
+        // Column header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(DaftarColors.Ink)
+                .padding(horizontal = 12.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TableHeaderCell("Entry · لیکنه", Modifier.weight(1f), DaftarColors.Paper, TextAlign.Start)
+            TableHeaderCell("In · راغلې", Modifier.width(74.dp), DaftarColors.LongGreen, TextAlign.End)
+            TableHeaderCell("Out · وتلې", Modifier.width(74.dp), DaftarColors.ShortRed, TextAlign.End)
+        }
+
+        data.days.forEach { day ->
+            // Day divider
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(DaftarColors.PaperDeep)
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = day.label.uppercase(),
+                    style = TextStyle(fontFamily = JetBrainsMono, fontWeight = FontWeight.SemiBold, fontSize = 8.5.sp, letterSpacing = 0.1.em, color = DaftarColors.InkSoft),
+                )
+                Text(
+                    text = "Net " + (if (day.netAfn >= 0) "+" else "−") + Formatters.compact(kotlin.math.abs(day.netAfn)) + " AFN",
+                    style = TextStyle(fontFamily = JetBrainsMono, fontWeight = FontWeight.SemiBold, fontSize = 8.5.sp, color = DaftarColors.Muted),
+                )
+            }
+            day.rows.forEach { row -> LedgerTableRowView(row, onOpen) }
+        }
+
+        // Totals footer
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(DaftarColors.Ink)
+                .padding(horizontal = 12.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "TOTAL · ټول",
+                    style = TextStyle(fontFamily = JetBrainsMono, fontWeight = FontWeight.SemiBold, fontSize = 8.5.sp, letterSpacing = 0.1.em, color = DaftarColors.GoldSoft),
+                )
+                Text(
+                    text = "AFN-eq",
+                    style = TextStyle(fontFamily = JetBrainsMono, fontSize = 7.sp, color = DaftarColors.GoldSoft.copy(alpha = 0.7f)),
+                )
+            }
+            Text(
+                text = "+" + Formatters.compact(data.totalInAfn),
+                modifier = Modifier.width(74.dp),
+                textAlign = TextAlign.End,
+                style = TextStyle(fontFamily = JetBrainsMono, fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp, color = DaftarColors.LongGreen),
+            )
+            Text(
+                text = "−" + Formatters.compact(data.totalOutAfn),
+                modifier = Modifier.width(74.dp),
+                textAlign = TextAlign.End,
+                style = TextStyle(fontFamily = JetBrainsMono, fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp, color = DaftarColors.ShortRed),
+            )
+        }
+        // Net line
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(DaftarColors.PaperDeep)
+                .padding(horizontal = 12.dp, vertical = 9.dp),
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Text(
+                text = "Net across all entries · ",
+                style = TextStyle(fontFamily = JetBrainsMono, fontSize = 9.5.sp, color = DaftarColors.Muted),
+            )
+            Text(
+                text = (if (data.netAfn >= 0) "+" else "−") + Formatters.number(kotlin.math.abs(data.netAfn)) + " AFN",
+                style = TextStyle(fontFamily = JetBrainsMono, fontWeight = FontWeight.Bold, fontSize = 9.5.sp, color = if (data.netAfn >= 0) DaftarColors.Green else DaftarColors.Red),
+            )
+        }
+    }
+}
+
+@Composable
+private fun TableHeaderCell(text: String, modifier: Modifier, color: Color, align: TextAlign) {
+    Text(
+        text = text.uppercase(),
+        modifier = modifier,
+        textAlign = align,
+        style = TextStyle(fontFamily = JetBrainsMono, fontWeight = FontWeight.SemiBold, fontSize = 8.sp, letterSpacing = 0.1.em, color = color),
+    )
+}
+
+@Composable
+private fun LedgerTableRowView(row: LedgerTableRow, onOpen: (LedgerEntry) -> Unit) {
+    val (icon, tint) = com.daftar.app.ui.components.ledgerEntryIconStyle(row.entry)
+    val iconBg = com.daftar.app.ui.components.ledgerEntryIconBackground(row.entry)
+    val amountText = Formatters.number(row.amount, com.daftar.app.domain.model.AssetCatalog.decimalsFor(row.currency))
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onOpen(row.entry) }
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(
+            modifier = Modifier.weight(1f).padding(end = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Box(
+                modifier = Modifier.size(22.dp).clip(RoundedCornerShape(7.dp)).background(iconBg),
+                contentAlignment = Alignment.Center,
+            ) {
+                androidx.compose.material3.Icon(icon, null, tint = tint, modifier = Modifier.size(11.dp))
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = row.title,
+                    style = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 11.sp, color = DaftarColors.Ink),
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = row.timeLabel,
+                    style = TextStyle(fontFamily = JetBrainsMono, fontSize = 8.sp, color = DaftarColors.Muted),
+                )
+            }
+        }
+        TableNumCell(show = row.isIn, amount = amountText, currency = row.currency, color = DaftarColors.Green)
+        TableNumCell(show = !row.isIn, amount = amountText, currency = row.currency, color = DaftarColors.Red)
+    }
+}
+
+@Composable
+private fun TableNumCell(show: Boolean, amount: String, currency: String, color: Color) {
+    Column(
+        modifier = Modifier.width(74.dp),
+        horizontalAlignment = Alignment.End,
+    ) {
+        if (show) {
+            Text(
+                text = (if (color == DaftarColors.Green) "+" else "−") + amount,
+                style = TextStyle(fontFamily = JetBrainsMono, fontWeight = FontWeight.SemiBold, fontSize = 11.5.sp, color = color),
+            )
+            Text(
+                text = currency,
+                style = TextStyle(fontFamily = JetBrainsMono, fontSize = 7.5.sp, letterSpacing = 0.06.em, color = DaftarColors.Muted),
+            )
+        } else {
+            Text(
+                text = "·",
+                style = TextStyle(fontFamily = JetBrainsMono, fontSize = 12.sp, color = DaftarColors.LineStrong),
+            )
+        }
     }
 }
 

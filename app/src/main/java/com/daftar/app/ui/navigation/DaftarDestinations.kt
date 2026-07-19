@@ -20,6 +20,9 @@ object DaftarDestinations {
     fun newHawala(partnerId: String? = null) =
         if (partnerId == null) "newHawala" else "newHawala?partnerId=$partnerId"
 
+    /** v20 two-phase receive: records an incoming hawala as pending. */
+    const val RECEIVE_HAWALA = "receiveHawala"
+
     /** mode: full | gave | received */
     /** locked pins the entry to the given customer (v18 detail-page quick FABs). */
     const val NEW_CUSTOMER_TX = "newCustomerTx?mode={mode}&customerId={customerId}&locked={locked}"
@@ -30,6 +33,16 @@ object DaftarDestinations {
 
     const val NEW_FX = "newFx"
     const val FX_LEDGER = "fxLedger"
+
+    /** Expense entry form. optional teamMemberId pre-selects the member (v20 member detail CTA). */
+    const val NEW_EXPENSE = "newExpense?teamMemberId={teamMemberId}"
+    fun newExpense(teamMemberId: String? = null) =
+        if (teamMemberId == null) "newExpense" else "newExpense?teamMemberId=$teamMemberId"
+
+    // v20: Team members moved into the Daftar section (expenses tracked per person).
+    const val TEAM = "team"
+    const val TEAM_MEMBER_DETAIL = "team/{memberId}"
+    fun teamMemberDetail(memberId: String) = "team/$memberId"
 
     const val SETTLE = "settle/{partnerId}"
     fun settle(partnerId: String) = "settle/$partnerId"

@@ -126,43 +126,43 @@ fun PartnerDetailScreen(
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    IconSquareButton(Icons.AutoMirrored.Rounded.ArrowBack, { navController.popBackStack() }, onDark = true)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        IconSquareButton(Icons.Rounded.Phone, { toaster("Dialling ${partner.phone}…", ToastIcon.PHONE) }, onDark = true)
-                        IconSquareButton(Icons.Rounded.ChatBubble, { toaster("Opening WhatsApp to ${partner.shortName}", ToastIcon.MESSAGE) }, onDark = true)
-                    }
-                }
-                Spacer(Modifier.height(16.dp))
-                Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    PartnerBadge(partner, 56.dp)
-                    Column {
+                    // v20: the branch name moves into the title row; no avatar badge.
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        IconSquareButton(Icons.AutoMirrored.Rounded.ArrowBack, { navController.popBackStack() }, onDark = true)
                         Text(
                             text = partner.name,
                             style = TextStyle(
                                 fontFamily = Fraunces,
                                 fontWeight = FontWeight.Medium,
-                                fontSize = 22.sp,
+                                fontSize = 20.sp,
                                 letterSpacing = (-0.02).em,
                                 color = DaftarColors.Paper,
                             ),
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = "${partner.city.displayName.uppercase()} · ${partner.phone}",
-                            style = TextStyle(
-                                fontFamily = JetBrainsMono,
-                                fontSize = 11.sp,
-                                letterSpacing = 0.1.em,
-                                color = DaftarColors.GoldSoft,
-                            ),
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                         )
                     }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        IconSquareButton(Icons.Rounded.Phone, { toaster("Dialling ${partner.phone}…", ToastIcon.PHONE) }, onDark = true)
+                        IconSquareButton(Icons.Rounded.ChatBubble, { toaster("Opening WhatsApp to ${partner.shortName}", ToastIcon.MESSAGE) }, onDark = true)
+                    }
                 }
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    text = "${partner.city.displayName.uppercase()} · ${partner.phone}",
+                    style = TextStyle(
+                        fontFamily = JetBrainsMono,
+                        fontSize = 11.sp,
+                        letterSpacing = 0.1.em,
+                        color = DaftarColors.GoldSoft,
+                    ),
+                )
                 Spacer(Modifier.height(16.dp))
                 HorizontalDivider(color = DaftarColors.Paper.copy(alpha = 0.15f))
                 Spacer(Modifier.height(14.dp))
@@ -377,8 +377,8 @@ private fun PartnerTxEntry(h: Hawala, onClick: () -> Unit) {
         }
         Spacer(Modifier.height(4.dp))
         Text(
-            text = if (isSettle) (h.note ?: "Settled")
-            else "${h.fromCity.code} → ${h.toCity.code} · from ${h.senderName} · to ${h.receiverName}",
+            // v20 shows sender → receiver names instead of the city route.
+            text = if (isSettle) (h.note ?: "Settled") else "${h.senderName} → ${h.receiverName}",
             style = TextStyle(fontFamily = Inter, fontSize = 12.sp, color = DaftarColors.InkSoft),
         )
         Spacer(Modifier.height(8.dp))

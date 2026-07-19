@@ -9,6 +9,7 @@ import com.daftar.app.domain.model.CurrencyConversion
 import com.daftar.app.domain.model.Customer
 import com.daftar.app.domain.model.CustomerTransaction
 import com.daftar.app.domain.model.CustomerTxType
+import com.daftar.app.domain.model.Expense
 import com.daftar.app.domain.model.FxSide
 import com.daftar.app.domain.model.FxTrade
 import com.daftar.app.domain.model.Hawala
@@ -21,6 +22,7 @@ import com.daftar.app.domain.model.PartnerTier
 import com.daftar.app.domain.model.Rate
 import com.daftar.app.domain.model.RateBook
 import com.daftar.app.domain.model.RatePair
+import com.daftar.app.domain.model.TeamMember
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -41,6 +43,8 @@ data class UserDataSnapshot(
     val investments: List<Investment>,
     val rateBook: RateBook,
     val settings: LedgerSettings,
+    val teamMembers: List<TeamMember> = emptyList(),
+    val expenses: List<Expense> = emptyList(),
 )
 
 /**
@@ -89,9 +93,12 @@ class UserDataStore @Inject constructor(@ApplicationContext context: Context) {
             "defaults",
             JSONObject()
                 .put("reportingCurrency", s.settings.reportingCurrency)
-                .put("tradeCurrency", s.settings.tradeCurrency),
+                .put("tradeCurrency", s.settings.tradeCurrency)
+                .put("ledgerTableView", s.settings.ledgerTableView),
         )
         .put("activeAssets", JSONObject(s.settings.activeAssetOverrides.mapValues { it.value as Any }))
+        .put("teamMembers", JSONArray(s.teamMembers.map(::encodeTeamMember)))
+        .put("expenses", JSONArray(s.expenses.map(::encodeExpense)))
 
     private fun decode(json: JSONObject): UserDataSnapshot {
         val drawerJson = json.getJSONObject("cashDrawer")
@@ -111,9 +118,48 @@ class UserDataStore @Inject constructor(@ApplicationContext context: Context) {
                 reportingCurrency = defaults.getString("reportingCurrency"),
                 tradeCurrency = defaults.getString("tradeCurrency"),
                 activeAssetOverrides = overrides,
+                // optBoolean keeps blobs written before v20 (no key) decoding cleanly.
+                ledgerTableView = defaults.optBoolean("ledgerTableView", false),
             ),
+            // teamMembers/expenses are v20 additions — absent in older blobs.
+            teamMembers = json.optJSONArray("teamMembers")?.mapObjects(::decodeTeamMember) ?: emptyList(),
+            expenses = json.optJSONArray("expenses")?.mapObjects(::decodeExpense) ?: emptyList(),
         )
     }
+
+    private fun encodeTeamMember(m: TeamMember): JSONObject = JSONObject()
+        .put("id", m.id)
+        .put("name", m.name)
+        .put("role", m.role)
+        .put("phone", m.phone ?: JSONObject.NULL)
+        .put("initial", m.initial)
+
+    private fun decodeTeamMember(o: JSONObject): TeamMember = TeamMember(
+        id = o.getString("id"),
+        name = o.getString("name"),
+        role = o.getString("role"),
+        phone = o.optStringOrNull("phone"),
+        initial = o.getString("initial"),
+    )
+
+    private fun encodeExpense(e: Expense): JSONObject = JSONObject()
+        .put("id", e.id)
+        .put("amount", e.amount)
+        .put("currency", e.currency)
+        .put("teamMemberId", e.teamMemberId)
+        .put("note", e.note ?: JSONObject.NULL)
+        .put("ts", e.timestampMillis)
+        .put("dateLabel", e.dateLabel)
+
+    private fun decodeExpense(o: JSONObject): Expense = Expense(
+        id = o.getString("id"),
+        amount = o.getDouble("amount"),
+        currency = o.getString("currency"),
+        teamMemberId = o.getString("teamMemberId"),
+        note = o.optStringOrNull("note"),
+        timestampMillis = o.getLong("ts"),
+        dateLabel = o.getString("dateLabel"),
+    )
 
     private fun encodePartner(p: Counterparty): JSONObject = JSONObject()
         .put("id", p.id)
@@ -209,6 +255,7 @@ class UserDataStore @Inject constructor(@ApplicationContext context: Context) {
         .put("ts", t.timestampMillis)
         .put("note", t.note ?: JSONObject.NULL)
         .put("hawalaId", t.hawalaId ?: JSONObject.NULL)
+        .put("photoUris", JSONArray(t.photoUris))
         .put(
             "conversion",
             t.conversion?.let {
@@ -230,6 +277,9 @@ class UserDataStore @Inject constructor(@ApplicationContext context: Context) {
         timestampMillis = o.getLong("ts"),
         note = o.optStringOrNull("note"),
         hawalaId = o.optStringOrNull("hawalaId"),
+        photoUris = o.optJSONArray("photoUris")?.let { arr ->
+            (0 until arr.length()).map { arr.getString(it) }
+        } ?: emptyList(),
         conversion = if (o.isNull("conversion")) null else o.getJSONObject("conversion").let {
             CurrencyConversion(
                 receivedAmount = it.getDouble("receivedAmount"),

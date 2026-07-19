@@ -46,6 +46,12 @@ class InMemoryPartnerRepository @Inject constructor(seed: SeedData) : PartnerRep
         }
     }
 
+    override suspend fun removeHawala(hawalaId: String) {
+        state.update { partners ->
+            partners.map { p -> p.copy(hawalas = p.hawalas.filterNot { it.id == hawalaId }) }
+        }
+    }
+
     override suspend fun clearAll() {
         state.value = emptyList()
     }
