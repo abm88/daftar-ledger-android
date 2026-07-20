@@ -21,7 +21,7 @@ android {
         // Override with -PDAFTAR_API_BASE_URL=https://api.example.com/ for
         // device/production builds. 10.0.2.2 reaches localhost from an emulator.
         val daftarApiBaseUrl = providers.gradleProperty("DAFTAR_API_BASE_URL")
-            .orElse("http://10.0.2.2:3000/")
+            .orElse("http://192.168.0.119:3000/")
             .get()
         buildConfigField("String", "DAFTAR_API_BASE_URL", "\"$daftarApiBaseUrl\"")
     }

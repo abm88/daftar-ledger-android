@@ -310,14 +310,28 @@ fun HawalasScreen(
         // v20: dual FAB — start a Send or Receive hawala from here.
         Row(
             modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 20.dp, bottom = 20.dp),
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            HawalaFab("Send", "لیږل", Icons.Rounded.ArrowUpward, DaftarColors.Copper) {
+            HawalaFab(
+                label = "Send",
+                pashto = "لیږل",
+                icon = Icons.Rounded.ArrowUpward,
+                container = DaftarColors.Copper,
+                modifier = Modifier.weight(1f),
+            ) {
                 navController.navigate(DaftarDestinations.newHawala())
             }
-            HawalaFab("Receive", "ترلاسه", Icons.Rounded.ArrowDownward, DaftarColors.Green) {
+            HawalaFab(
+                label = "Receive",
+                pashto = "ترلاسه",
+                icon = Icons.Rounded.ArrowDownward,
+                container = DaftarColors.Green,
+                modifier = Modifier.weight(1f),
+            ) {
                 navController.navigate(DaftarDestinations.RECEIVE_HAWALA)
             }
         }
@@ -325,9 +339,16 @@ fun HawalasScreen(
 }
 
 @Composable
-private fun HawalaFab(label: String, pashto: String, icon: androidx.compose.ui.graphics.vector.ImageVector, container: androidx.compose.ui.graphics.Color, onClick: () -> Unit) {
+private fun HawalaFab(
+    label: String,
+    pashto: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    container: androidx.compose.ui.graphics.Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .clip(RoundedCornerShape(16.dp))
             .background(container)
             .clickable(onClick = onClick)
